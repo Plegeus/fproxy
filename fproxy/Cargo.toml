@@ -1,0 +1,10 @@
+[package]
+name = "fproxy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fproxy_derive = { path = "./../fproxy_derive" }
+libloading = "0.8.9"
+
+
