@@ -1,8 +1,5 @@
 use std::ops::{Deref, DerefMut};
 
-use crate::proxy;
-
-
 
 pub trait FInit {
   type In;
@@ -96,5 +93,20 @@ where
 }
 
 
+
+/// Trait to link types to their `#[repr(C)]` equivalents. </br>
+/// The information is used convert function arguments to 
+/// c compatible datatypes in order to safely pass the dll boundary. </br>
+/// Converts a *Rust* type to a *C* type.
+pub trait FToC {
+  type CType;
+  fn to_c(self) -> Self::CType;
+}
+/// Idem `trait FToC`. </br>
+/// Converts a *C* type to a *Rust* type.
+pub trait FToRust {
+  type RustType;
+  fn to_rust(self) -> Self::RustType;
+}
 
 

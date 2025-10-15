@@ -11,7 +11,7 @@ pub struct MyPlugin {
 }
 #[fproxy::imp]
 impl MyPlugin {
-  fn run(&mut self) {
+  pub fn run(&mut self) {
     let data = self.data;
     println!(">>> data is {data}");
     let data = (self.run)(data);

@@ -68,6 +68,7 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
 
   let _struct = if args.lib {
     quote!(
+      pub(in super) type FIdent = #fident;
       pub struct #fident {
         handle: *const (),
         pub(crate) lib: Library,
@@ -89,6 +90,7 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
     )
   } else {
     quote!(
+      pub(in super) type FIdent = #fident<'f>;
       pub struct #fident<'f> {
         handle: *const (),
         pub(crate) lib: &'f Library,
@@ -109,13 +111,12 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
     )
   };
 
-  let fident = if args.lib { fident.clone() } else { syn::parse(quote!(#fident<'_>).into()).unwrap() };
 
   quote! {
     
     #_struct
 
-    impl FProxy for #fident {
+    impl FProxy for FIdent {
       unsafe fn free(&mut self) {
         Box::from_raw(self.handle as *mut super::#ident);
       }
