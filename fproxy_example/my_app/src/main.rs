@@ -6,9 +6,20 @@ use my_plugin::ffi::FMyPlugin;
 
 fn main() {
     
-  let mut plug = unsafe { FMyPlugin::new("./target/debug/my_plugin.dll", 5).unwrap() };
-  plug.run();
+  // Create a (proxy to a) plugin from a dynamicly loaded library.
+  // Proxies are annoteted with an `F` for `foreign`.
 
+  // The path to the library must be given, without file extension of `lib` prefix
+  // in order to keep cross-platform compatibility.
+  // Other parameters defined in a constructor follow the library.
+  let mut plug = unsafe { FMyPlugin::new("./target/debug/my_plugin", 5) };
+
+  // Functions defined on a foreign type also generate on the proxy.
+  // Like this the dependant binary can use the foreign type with 
+  // an almost one to one mapping.
+  plug.run();
+  plug.run();
+  plug.run();
 
 }
 
