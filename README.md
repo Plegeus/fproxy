@@ -3,8 +3,8 @@
 Rust has an unstable ABI which makes rust to rust ffi unsafe (across dll boundaries). This crate aims to solve that issue by creating ffi-safe wrappers around existing types, so called proxies.
 
 ## The Goal ##
-The goal of this crate is the allow safe rust to rust ffi for (ideally) the entirety of the rust language in the context of dynamically loaded libraries. The most common usecase are *plugin systems*, where some applications needs to load plugins at runtime.
-An additional goal is *to minimise or even negate boilerplate* on the plugin side, that is, existing libraries should be able to become ffi-safe ("abi stable") *without altering existing code*.
+The goal of this crate is the allow safe rust to rust ffi for (ideally) the entirety of the rust language in the context of dynamically loaded libraries. The most common usecase are **plugin systems**, where some applications needs to load plugins at runtime.
+An additional goal is **to minimise or even negate boilerplate** on the plugin side, that is, existing libraries should be able to become ffi-safe ("abi stable") **without altering existing code**.
 
 To this end fproxy provides a set of macros that can be used to annotate the types that are required across a dll boundary.
 
