@@ -103,6 +103,7 @@ For a detailed set of examples, please refer to the `./fproxy_examples` subdirec
 ## Roadmap ##
 Primary goals are:
 * traits (both user defined and std),
+* enums.
 
 Possible problems are:
 * generics,
