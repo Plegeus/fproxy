@@ -4,6 +4,15 @@ use fproxy;
 use fproxy::{FToC, FIntoProxy, FFromC};
 
 
+
+#[fproxy::proxy]
+#[derive(FIntoProxy)]
+struct Data {
+  data: u128,
+}
+
+
+
 const FACTOR: u128 = 2;
 
 // The `#[fproxy::proxy]` macro is the workhorse of the fproxy crate
@@ -14,14 +23,14 @@ const FACTOR: u128 = 2;
 #[fproxy::proxy("lib")]
 #[derive(FIntoProxy, FToC, FFromC)]
 pub struct MyPlugin {
-  data: u128,
+  data: Data,
   run: Box<dyn Fn(u128) -> u128>,
 }
 
 // To allow customisability, impl must be annotated with a similar macro call.
 // By default, all functions in the `impl` are generated for the proxy, 
 // unless there is no `self` parameter.
-#[fproxy::imp]
+#[fproxy::proxy]
 impl MyPlugin {
 
   // Tagging a function with "new" indicates this is a constructor for the proxy,
@@ -30,34 +39,38 @@ impl MyPlugin {
   // the construtor for the proxy will include an additional argument for the library path.
   // If "lib" is ommited, it must also be ommited above, on the type definition and 
   // instead of a path argument, the constructor will take a reference to the library instead.
-  #[fproxy::imp("new", "lib")]
+  #[fproxy::proxy("new", "lib")]
   pub fn new(data: u128) -> Self {
-    println!("creating plugin with data: {data}");
+    //println!("creating plugin with data: {data}");
     MyPlugin { 
-      data, 
+      data: Data { data }, 
       run: Box::new(|i| i * FACTOR),
     }
   }
 
   // No tags, the function is included on the proxy.
   pub fn run(&mut self) {
-    let data = self.data;
-    println!(">>> data is {data}");
+    let data = self.data.data;
+    //println!(">>> data is {data}");
     let data = (self.run)(data);
-    println!(">>> updated data to {data}");
-    self.data = data;
+    //println!(">>> updated data to {data}");
+    self.data.data = data;
   }
+
+  //pub fn data(&self) -> &Data {
+  //  &self.data
+  //}
 
   // If for whichever reason, the proxy cannot or may not have access to a function,
   // the function can be ommited as whown below:
-  #[fproxy::imp("ignore")]
+  #[fproxy::proxy("ignore")]
   pub fn something_complicated(&self) {
-
+  
   }
 
   // Private functions are also ignored.
   fn something_private(&self) {
-
+  
   }
 
 }
@@ -65,7 +78,7 @@ impl MyPlugin {
 
 
 
-
+ 
 
 
 

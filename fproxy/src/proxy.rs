@@ -70,7 +70,7 @@ where
 /// Note that a proxy is never `#[repr(C)]`, to pass values safely
 /// over the dll boundary, refer to `fproxy::FToC` and `fproxy::FFromC`.
 pub trait FIntoProxy {
-  type FSelf;
+  type FSelf<'l>;
 }
 
 #[macro_export]
@@ -83,13 +83,13 @@ macro_rules! impl_f_into_proxy {
   };
   (impl $crat:tt, $T:ty, $U:ty) => {
     impl $crat::FIntoProxy for $T {
-      type FSelf = $crat::FOwned<$U>;
+      type FSelf<'l> = $crat::FOwned<$U>;
     }
     impl $crat::FIntoProxy for &$T {
-      type FSelf = $crat::FRef<$U>;
+      type FSelf<'l> = $crat::FRef<$U>;
     }
     impl $crat::FIntoProxy for &mut $T {
-      type FSelf = $crat::FRefMut<$U>;
+      type FSelf<'l> = $crat::FRefMut<$U>;
     }
   };
 }
@@ -185,7 +185,7 @@ impl<T> FIntoProxy for T
 where 
   T: FReprC
 {
-  type FSelf = Self;
+  type FSelf<'l> = Self;
 }
 
 impl<T> FToC for T 
@@ -240,8 +240,8 @@ where
 
 #[cfg(test)]
 pub mod proxy {
-    use crate::proxy::U128;
 
+  use crate::proxy::U128;
 
   #[test]
   fn test_u128() {

@@ -5,6 +5,8 @@ use quote::quote;
 use syn::{DeriveInput, Ident, LitByteStr, Token};
 use syn::parse::{Parse, ParseStream};
 
+use crate::tfident;
+
 
 
 struct Args {
@@ -28,26 +30,17 @@ impl Parse for Args {
 }
 
 
-pub(crate) fn proxy(args: TokenStream, input: TokenStream) -> TokenStream {
+pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   
-  let ast: DeriveInput = syn::parse(input)
-    .expect("failed to parse input");
   let ident = ast.ident.clone();
   let fident = Ident::new(&format!("F{ident}"), ident.span());
   let args: Args = syn::parse(args)
     .expect("failed to parse args");
 
-  let _fstruct = proxy_fstruct(&ident, &fident, &args);
+  let fstruct = proxy_fstruct(&ident, &fident, &args);
   
   quote! {
-    pub mod ffi {
-          
-      use fproxy::{FProxy, FIntoProxy};
-      use fproxy::libloading::{self, Library};
-
-      #_fstruct
-
-    }
+    #fstruct
     #ast
   }
     .into()
@@ -56,20 +49,24 @@ pub(crate) fn proxy(args: TokenStream, input: TokenStream) -> TokenStream {
 
 fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
 
+  // e.g., type TFMyPlugin = FMyPlugin<'_>;
+  // needed to access a proxy's type without worrying about lifetimes.
+  let tfident = tfident (&ident);
+
   let _struct = if args.lib {
     quote!(
-      pub(in super) type FIdent = #fident;
+      type #tfident<'l> = #fident;
       pub struct #fident {
-        pub(in super) handle: *const (),
-        pub(in super) lib: Library,
+        pub handle: *const (),
+        pub lib: fproxy::libloading::Library,
       }
     )
   } else {
     quote!(
-      pub(in super) type FIdent = #fident<'f>;
-      pub struct #fident<'f> {
-        pub(in super) handle: *const (),
-        pub(in super) lib: &'f Library,
+      type #tfident<'l> = #fident<'l>;
+      pub struct #fident<'l> {
+        pub handle: *const (),
+        pub lib: &'l fproxy::libloading::Library,
       }
     )
   };
@@ -79,17 +76,20 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
     
     #_struct
 
-    impl FProxy for FIdent {
+    impl fproxy::FProxy for #tfident<'_> {
       unsafe fn free(&mut self) {
-        Box::from_raw(self.handle as *mut super::#ident);
+        Box::from_raw(self.handle as *mut #ident);
       }
     }
-    impl FIntoProxy for FIdent {
-      type FSelf = Self;
-    }
+    //impl FIntoProxy for #tfident {
+    //  type FSelf = Self;
+    //}
 
   }
 }
+
+
+
 
 
 

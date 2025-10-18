@@ -63,8 +63,9 @@ pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
         &body
       );
 
+      let tfident = Ident::new(&format!("TF{ident}"), ident.span());
       q.extend(quote! {
-        impl ffi::FIdent {
+        impl #tfident<'_> {
           #ffun
         }
         // FIXME: find a way to guarantee/enforce unique names for foreign functions.
@@ -103,7 +104,7 @@ fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &
   }
 
   quote! {
-   pub fn #name<'l>(#input) -> <#output as fproxy::FIntoProxy>::FSelf {
+   pub fn #name<'l>(#input) -> <#output as fproxy::FIntoProxy>::FSelf<'l> {
       #body
     }
   }
