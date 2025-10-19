@@ -1,5 +1,7 @@
 # fproxy #
 ## Introduction ##
+> [!WARNING]
+> This crate is very new, functionality may be subject to change.
 Rust has an unstable ABI which makes rust to rust ffi unsafe (across dll boundaries). This crate aims to solve that issue by creating ffi-safe wrappers around existing types, so called proxies.
 
 ## The Goal ##
@@ -92,30 +94,26 @@ impl FToC for u128 {
   }
 }
 
-impl FProxyFrom<'_, U128> for u128 {
-  fn proxy_from(value: U128, _: &'_ Library) -> Self {
-    From::from(value)
-  }
-}
-
-// FFromC is automatically implemented for types T that impl FToC + From<T::CType>.
+// FFromC and FProxyFrom is automatically implemented for types T that impl FToC + From<T::CType>.
 ```
 In short, to pass data over the dll boundary, C types are needed. These C types can be constructed from the library itself or from the application using `trait FToC`. To read data from the application, the C type is converted to a proxy using `trait FProxyFrom`. To read data from the library the type is converted to a rust type (a type accesible from the library) using `trait FFromC`: <br/>
 * `FToC -> FProxyFrom` and
 * `FToC -> FFromC`.
+
+> [!NOTE]
+> `FFromC` and `FProxyFrom` are automatically implemented for types `T` that implemented `FToC` and `From<<T as FToC>::CType>`.
 
 These traits allow for full customisablity, note not all types need to be a proxy.
 
 ## Examples ##
 For a detailed set of examples, please refer to the `./fproxy_examples` subdirectory.
 
-## Roadmap ##
-Primary goals are:
-* traits (both user defined and std),
-* enums.
+## Goals and Pitfals ##
+The first items on the to do list are:
+* traits (i.e., return `Box<dyn SomeTrait>` for any trait),
+* enums (return an enum where the fields are proxies),
+* derives (traits derived on a type should be propagated to the proxy).
 
-Possible problems are:
-* generics,
-* `impl SomeTrait` in parameters.
-
+> ![IMPORTANT]
+> At the time of writing it is uncertain if the full feature set of Rust can be supported. A plan exists for the items above.
 
