@@ -240,8 +240,7 @@ impl<T: FLocal> FLocal for *mut T { }
 macro_rules! impl_primitive {
   ($T:ty) => {
     impl_f_as_proxy!($T);
-    //impl_f_into_proxy!($T);
-    impl_f_proxy_from!($T);
+    //impl_f_proxy_from!($T);
     impl_f_local!($T);
   };
 }
@@ -330,25 +329,6 @@ macro_rules! impl_f_from_c {
  
 
 
-/*
-impl<'l, T> FIntoProxy<'l> for T 
-where 
-  T: FReprC
-{
-  type FSelf = Self;
-  fn into_proxy(self, _: &'l Library) -> Self::FSelf {
-    self
-  }
-}
-impl<T> FToC for T 
-where 
-  T: FReprC
-{
-  type CType = Self;
-  fn to_c(self) -> Self::CType {
-    self
-  }
-}*/
 impl<T> FFromC for T
 where 
   T: FToC + From<T::CType>,
@@ -357,6 +337,15 @@ where
     Self::from(c_type)
   }
 } 
+impl<T> FProxyFrom<'_, T::CType> for T 
+where 
+  T: FToC + From<T::CType>
+{
+  fn proxy_from(value: T::CType, _: &'_ Library) -> Self {
+    Self::from(value)
+  }
+}
+
 
 #[derive_ReprC]
 #[repr(C)]
@@ -388,11 +377,11 @@ impl FToC for u128 {
   }
 }
 
-impl FProxyFrom<'_, U128> for u128 {
-  fn proxy_from(value: U128, _: &'_ Library) -> Self {
-    From::from(value)
-  }
-}
+//impl FProxyFrom<'_, U128> for u128 {
+//  fn proxy_from(value: U128, _: &'_ Library) -> Self {
+//    From::from(value)
+//  }
+//}
 
 
 impl FAsProxy<'_> for u128 {
@@ -401,11 +390,6 @@ impl FAsProxy<'_> for u128 {
 impl FAsProxy<'_> for U128 {
   type FSelf = u128;
 }
-//impl FIntoProxy<'_> for U128 {
-//  fn into_proxy(self, _: &'_ Library) -> Self::FSelf {
-//    From::from(self)
-//  }
-//}
 
 
 #[cfg(test)]
