@@ -21,6 +21,8 @@ fn main() {
   plug.run();
   plug.run();
 
+  // Data is also defined as a proxy, 
+  // the functions generated on Data are also available.
   let data = plug.data();
   println!("{}", data.read());
 
