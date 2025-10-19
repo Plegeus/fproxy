@@ -92,10 +92,19 @@ impl FToC for u128 {
   }
 }
 
+impl FProxyFrom<'_, U128> for u128 {
+  fn proxy_from(value: U128, _: &'_ Library) -> Self {
+    From::from(value)
+  }
+}
+
 // FFromC is automatically implemented for types T that impl FToC + From<T::CType>.
 ```
+In short, to pass data over the dll boundary, C types are needed. These C types can be constructed from the library itself or from the application using `trait FToC`. To read data from the application, the C type is converted to a proxy using `trait FProxyFrom`. To read data from the library the type is converted to a rust type (a type accesible from the library) using `trait FFromC`: <br/>
+* `FToC -> FProxyFrom` and
+* `FToC -> FFromC`.
 
-These traits allow for full customisablity, notably not all types need to be a proxy.
+These traits allow for full customisablity, note not all types need to be a proxy.
 
 ## Examples ##
 For a detailed set of examples, please refer to the `./fproxy_examples` subdirectory.
