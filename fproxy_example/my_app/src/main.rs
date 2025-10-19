@@ -1,7 +1,7 @@
 
 
 use my_plugin;
-use my_plugin::ffi::FMyPlugin;
+use my_plugin::FMyPlugin;
 
 
 fn main() {
@@ -20,6 +20,9 @@ fn main() {
   plug.run();
   plug.run();
   plug.run();
+
+  let data = plug.data();
+  println!("{}", data.read());
 
 }
 

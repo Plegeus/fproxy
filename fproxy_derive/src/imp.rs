@@ -2,7 +2,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, token::Comma, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, LitByteStr, Pat, Receiver, ReturnType, Type, Visibility};
+use syn::{punctuated::Punctuated, token::Comma, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Type, Visibility};
 
 
 pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
@@ -93,7 +93,10 @@ fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &
 
   // The function either needs a self (which has a library) or 
   // a library in order to execute in the dll.
-  if let Some(slf) = &imp.slf {
+  if let Some(mut slf) = imp.slf.clone() {
+    if let Some((_, l)) = &mut slf.reference {
+      *l = Some(Lifetime::new("'l", Span::call_site()));
+    } 
     input = quote!(#slf, #input);
   } else {
     if imp.lib {
@@ -103,8 +106,9 @@ fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &
     }
   }
 
+  // Inputs and outputs to proxies are proxies.
   quote! {
-   pub fn #name<'l>(#input) -> <#output as fproxy::FIntoProxy>::FSelf<'l> {
+   pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
       #body
     }
   }
@@ -125,6 +129,7 @@ fn make_c_function(imp: &Imp, ident: &Ident, fun: &Ident, fname: &Ident, input: 
   }
 
   quote! {
+    /// Inputs and outputs to `extern "C"` functions are `CType`s.
     unsafe extern "C" fn #fname(#input) -> <#output as fproxy::FToC>::CType {
       fproxy::FToC::to_c(#ident::#fun(#input_names))
     }
@@ -183,9 +188,12 @@ fn make_body(imp: &Imp, ident: &Ident, fname: &Ident, input: &Input, output: &Qu
       {
         unsafe {
           use fproxy::libloading::{Symbol};
-          let func: Symbol<unsafe extern "C" fn(*const (), #input) -> #output> = 
+          let func: Symbol<unsafe extern "C" fn(*const (), #input) -> <#output as fproxy::FToC>::CType> = 
             self.lib.get(#fn_bytes).unwrap();
-          func(self.handle, #input_names)
+          fproxy::FProxyFrom::<'l>::proxy_from(
+            func(self.handle), 
+            &self.lib
+          )
         }
       }
     }
@@ -194,15 +202,19 @@ fn make_body(imp: &Imp, ident: &Ident, fname: &Ident, input: &Input, output: &Qu
 }
 
 fn make_output(ident: &Ident, out: &ReturnType) -> Quote {
-  match out {
+  match out.clone() {
     ReturnType::Default => quote!(()),
-    ReturnType::Type(_, typ) => {
-      if let Type::Path(path) = typ.as_ref() {
-        if path.path.segments.first().unwrap().ident.to_string() == "Self" {
+    ReturnType::Type(_, mut typ) => {
+      match typ.as_mut() {
+        Type::Path(path) if path.path.segments.first().unwrap().ident.to_string() == "Self" => {
           return quote!(#ident);
+        },
+        Type::Reference(refr) => {
+          refr.lifetime = Some(Lifetime::new("'static", Span::call_site()));
         }
-      }
-      quote!(#typ)
+        _ => (),
+      };
+      return quote!(#typ);
     },
   }
 }

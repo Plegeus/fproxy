@@ -1,9 +1,13 @@
 
 use std::ops::{Deref, DerefMut};
 
+use libloading::Library;
 use safer_ffi::{derive_ReprC, layout::ReprC};
 
 
+/// Trait to control proxies from the application. <br/>
+/// Everything that is a proxy implements this trait,
+/// it is automatically implemented with `#[fproxy::proxy]`.
 pub trait FProxy {
   /// Frees allocated memory in the library. </br>
   /// ### Safety ###
@@ -13,18 +17,11 @@ pub trait FProxy {
   }
 }
 
-
+/// Owned representation of a proxy. <br/>
+/// When `Self` is dropped, the proxy will be freed.
 pub struct FOwned<F: FProxy> {
   proxy: F,
 }
-
-pub struct FRef<F: FProxy> {
-  proxy: F,
-}
-pub struct FRefMut<F: FProxy> {
-  proxy: F,
-}
-
 
 impl<F> Drop for FOwned<F>
 where 
@@ -65,34 +62,192 @@ where
   }
 }
 
+impl<'l, F, U> FProxyFrom<'l, U> for FOwned<F> 
+where 
+  F: FProxyFrom<'l, U> + FProxy
+{
+  fn proxy_from(value: U, lib: &'l Library) -> Self {
+    F::proxy_from(value, lib)
+      .into()
+  }
+}
+
+/// A reference to a proxy. <br/>
+/// For example: `&MyPlugin` translates to `FRef<FMyPlugin<'l>>`.
+#[derive(Clone, Copy)]
+pub struct FRef<F: FProxy> {
+  proxy: F,
+}
+
+impl<F> Deref for FRef<F>
+where 
+  F: FProxy
+{
+  type Target = F;
+  fn deref(&self) -> &Self::Target {
+    &self.proxy
+  }
+}
+
+
+impl<F> From<F> for FRef<F>
+where 
+  F: FProxy
+{
+  fn from(proxy: F) -> Self {
+    FRef { proxy }
+  }
+}
+
+impl<'l, F, U> FProxyFrom<'l, U> for FRef<F> 
+where 
+  F: FProxyFrom<'l, U> + FProxy
+{
+  fn proxy_from(value: U, lib: &'l Library) -> Self {
+    F::proxy_from(value, lib)
+      .into()
+  }
+}
+
+/// Like `FRef<F>`, but for mutable references.
+pub struct FRefMut<F: FProxy> {
+  proxy: F,
+}
+
+impl<F> Deref for FRefMut<F>
+where 
+  F: FProxy
+{
+  type Target = F;
+  fn deref(&self) -> &Self::Target {
+    &self.proxy
+  }
+}
+impl<F> DerefMut for FRefMut<F>
+where 
+  F: FProxy
+{
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.proxy
+  }
+}
+
+
+impl<F> From<F> for FRefMut<F>
+where 
+  F: FProxy
+{
+  fn from(proxy: F) -> Self {
+    FRefMut { proxy }
+  }
+}
+
+impl<'l, F, U> FProxyFrom<'l, U> for FRefMut<F> 
+where 
+  F: FProxyFrom<'l, U> + FProxy
+{
+  fn proxy_from(value: U, lib: &'l Library) -> Self {
+    F::proxy_from(value, lib)
+      .into()
+  }
+}
+
+
 
 /// Trait to link a type to its proxy. </br>
 /// Note that a proxy is never `#[repr(C)]`, to pass values safely
 /// over the dll boundary, refer to `fproxy::FToC` and `fproxy::FFromC`.
-pub trait FIntoProxy {
-  type FSelf<'l>;
+pub trait FAsProxy<'l> {
+  type FSelf;
+}
+macro_rules! impl_f_as_proxy {
+  ($T:ty) => {
+    impl FAsProxy<'_> for $T {
+      type FSelf = Self;
+    }
+  };
 }
 
-#[macro_export]
-macro_rules! impl_f_into_proxy {
+/// Trait to convert an arbitrary type to a proxy.
+pub trait FProxyFrom<'l, T> {
+  fn proxy_from(value: T, lib: &'l Library) -> Self;
+}
+
+macro_rules! impl_f_proxy_from {
   ($T:ty) => {
-    impl_f_into_proxy!(impl crate, $T);
-  };
-  (impl $crat:tt, $T:ty) => {
-    $crat::impl_f_into_proxy!(impl $crat, $T, Self);
-  };
-  (impl $crat:tt, $T:ty, $U:ty) => {
-    impl $crat::FIntoProxy for $T {
-      type FSelf<'l> = $crat::FOwned<$U>;
-    }
-    impl $crat::FIntoProxy for &$T {
-      type FSelf<'l> = $crat::FRef<$U>;
-    }
-    impl $crat::FIntoProxy for &mut $T {
-      type FSelf<'l> = $crat::FRefMut<$U>;
+    impl FProxyFrom<'_, $T> for $T {
+      fn proxy_from(value: $T, _: &Library) -> Self {
+        value
+      }
     }
   };
 }
+
+/// Trait to convert an arbitrary type to a proxy.
+//pub trait FIntoProxy<'l>: FAsProxy<'l> {
+//  fn into_proxy(self, lib: &'l Library) -> Self::FSelf;
+//}
+
+//#[macro_export]
+//macro_rules! impl_f_into_proxy {
+//  ($T:ty) => {
+//    impl<'l> FIntoProxy<'l> for $T {
+//      fn into_proxy(self, _: &'l crate::libloading::Library) -> Self::FSelf {
+//        self
+//      }
+//    }
+//  };
+//  //(impl $crat:tt, $T:ty) => {
+//  //  $crat::impl_f_into_proxy!(impl $crat, $T, Self);
+//  //};
+//  //(impl $crat:tt, $T:ty, $U:ty) => {
+//  //  impl<'l> $crat::FIntoProxy for $T {
+//  //    fn into_proxy(self, _: &'l $crat::libloading::Library) -> Self::FSelf {
+//  //      self
+//  //    }
+//  //  }
+//  //  impl<'l> $crat::FIntoProxy for &$T {
+//  //    fn into_proxy(self, _: &'l $crat::libloading::Library) -> Self::FSelf {
+//  //      self
+//  //    }
+//  //  }
+//  //  impl<'l> $crat::FIntoProxy for &mut $T {
+//  //    fn into_proxy(self, _: &'l $crat::libloading::Library) -> Self::FSelf {
+//  //      self
+//  //    }
+//  //  }
+//  //};
+//}
+
+
+
+/// Local trait for tagging local and std types.
+trait FLocal { }
+/// Trait to indicate a type is `#[repr(C)]`
+trait FReprC: ReprC + FLocal { }
+
+impl<T: ReprC + FLocal> FReprC for T { }
+
+macro_rules! impl_f_local {
+  ($T:ty) => {
+    impl FLocal for $T { }
+  };
+}
+
+impl<T: FLocal> FLocal for *const T { }
+impl<T: FLocal> FLocal for *mut T { }
+
+macro_rules! impl_primitive {
+  ($T:ty) => {
+    impl_f_as_proxy!($T);
+    //impl_f_into_proxy!($T);
+    impl_f_proxy_from!($T);
+    impl_f_local!($T);
+  };
+}
+
+impl_primitive!(());
+
 
 
 /// Trait to link types to their `#[repr(C)]` equivalents. </br>
@@ -100,8 +255,18 @@ macro_rules! impl_f_into_proxy {
 /// c compatible datatypes in order to safely pass the dll boundary. </br>
 /// Converts a *Rust* type to a *C* type.
 pub trait FToC {
-  type CType;
+  type CType: FReprC;
   fn to_c(self) -> Self::CType;
+}
+
+impl<T> FToC for T 
+where 
+  T: FReprC
+{
+  type CType = Self;
+  fn to_c(self) -> Self::CType {
+    self
+  }
 }
 
 #[macro_export]
@@ -165,29 +330,16 @@ macro_rules! impl_f_from_c {
  
 
 
-
-trait FReprC: ReprC { }
-macro_rules! impl_f_repr_c {
-  ($T:ty) => {
-    impl FReprC for $T { }
-  };
-}
-
-impl_f_repr_c!(());
-impl_f_repr_c!(U128);
-
-
-impl<T> FProxy for T 
-where 
-  T: FReprC
-{ }
-impl<T> FIntoProxy for T 
+/*
+impl<'l, T> FIntoProxy<'l> for T 
 where 
   T: FReprC
 {
-  type FSelf<'l> = Self;
+  type FSelf = Self;
+  fn into_proxy(self, _: &'l Library) -> Self::FSelf {
+    self
+  }
 }
-
 impl<T> FToC for T 
 where 
   T: FReprC
@@ -196,7 +348,15 @@ where
   fn to_c(self) -> Self::CType {
     self
   }
-}
+}*/
+impl<T> FFromC for T
+where 
+  T: FToC + From<T::CType>,
+{
+  unsafe fn from_c(c_type: Self::CType) -> Self {
+    Self::from(c_type)
+  }
+} 
 
 #[derive_ReprC]
 #[repr(C)]
@@ -204,6 +364,8 @@ pub struct U128 {
   l: u64,
   r: u64,
 }
+impl FLocal for U128 { }
+
 impl From<u128> for U128 {
   fn from(value: u128) -> Self {
     let r = value & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
@@ -213,7 +375,6 @@ impl From<u128> for U128 {
     }
   }
 }
-
 impl From<U128> for u128 {
   fn from(value: U128) -> Self {
     ((value.l as u128) << 64) + value.r as u128
@@ -226,16 +387,25 @@ impl FToC for u128 {
     From::from(self)
   }
 }
-impl<T> FFromC for T
-where 
-  T: FToC + From<T::CType>,
-{
-  unsafe fn from_c(c_type: Self::CType) -> Self {
-    Self::from(c_type)
+
+impl FProxyFrom<'_, U128> for u128 {
+  fn proxy_from(value: U128, _: &'_ Library) -> Self {
+    From::from(value)
   }
 }
 
 
+impl FAsProxy<'_> for u128 {
+  type FSelf = Self;
+}
+impl FAsProxy<'_> for U128 {
+  type FSelf = u128;
+}
+//impl FIntoProxy<'_> for U128 {
+//  fn into_proxy(self, _: &'_ Library) -> Self::FSelf {
+//    From::from(self)
+//  }
+//}
 
 
 #[cfg(test)]

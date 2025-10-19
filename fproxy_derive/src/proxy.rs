@@ -64,6 +64,7 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
   } else {
     quote!(
       type #tfident<'l> = #fident<'l>;
+      #[derive(Clone, Copy)]
       pub struct #fident<'l> {
         pub handle: *const (),
         pub lib: &'l fproxy::libloading::Library,
@@ -71,6 +72,20 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
     )
   };
 
+
+  let mut proxy_from = Quote::new();
+  if !args.lib {
+    proxy_from = quote! {
+      impl<'l> fproxy::FProxyFrom<'l, *const ()> for #tfident<'l> {
+        fn proxy_from(handle: *const (), lib: &'l fproxy::libloading::Library) -> Self {
+          Self {
+            handle,
+            lib,
+          }
+        }
+      }
+    };
+  }
 
   quote! {
     
@@ -81,9 +96,18 @@ fn proxy_fstruct(ident: &Ident, fident: &Ident, args: &Args) -> Quote {
         Box::from_raw(self.handle as *mut #ident);
       }
     }
-    //impl FIntoProxy for #tfident {
-    //  type FSelf = Self;
-    //}
+
+    impl<'l> fproxy::FAsProxy<'l> for #ident {
+      type FSelf = fproxy::FOwned<#tfident<'l>>;
+    }
+    impl<'l> fproxy::FAsProxy<'l> for &#ident {
+      type FSelf = fproxy::FRef<#tfident<'l>>;
+    }
+    impl<'l> fproxy::FAsProxy<'l> for &mut #ident {
+      type FSelf = fproxy::FRefMut<#tfident<'l>>;
+    }
+
+    #proxy_from
 
   }
 }

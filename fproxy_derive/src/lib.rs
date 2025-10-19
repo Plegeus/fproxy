@@ -27,6 +27,7 @@ pub(crate) fn tfident(ident: &Ident) -> Ident {
   Ident::new(&format!("TF{ident}"), ident.span())
 }
 
+/*
 #[proc_macro_derive(FIntoProxy)]
 pub fn f_into_proxy(input: TokenStream) -> TokenStream {
   
@@ -36,10 +37,10 @@ pub fn f_into_proxy(input: TokenStream) -> TokenStream {
   let tfident = tfident(&ident);
 
   quote! { 
-    fproxy::impl_f_into_proxy!(impl fproxy, #ident, #tfident<'l>);
+    fproxy::impl_f_into_proxy!(impl fproxy, #ident, #tfident<'_>);
   }
     .into()
-}
+} */
 
 #[proc_macro_derive(FToC)]
 pub fn f_to_c(input: TokenStream) -> TokenStream {

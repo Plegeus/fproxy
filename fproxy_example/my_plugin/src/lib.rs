@@ -1,14 +1,21 @@
 
 
 use fproxy;
-use fproxy::{FToC, FIntoProxy, FFromC};
+use fproxy::{FToC, FFromC};
 
 
 
 #[fproxy::proxy]
-#[derive(FIntoProxy)]
-struct Data {
+#[derive(FToC, FFromC)]
+pub struct Data {
   data: u128,
+}
+
+#[fproxy::proxy]
+impl Data {
+  pub fn read(&self) -> u128 {
+    self.data
+  }
 }
 
 
@@ -21,7 +28,7 @@ const FACTOR: u128 = 2;
 // Ommiting "lib" still requires a library object, the proxy will store 
 // a reference to a Library object.
 #[fproxy::proxy("lib")]
-#[derive(FIntoProxy, FToC, FFromC)]
+#[derive(FToC, FFromC)]
 pub struct MyPlugin {
   data: Data,
   run: Box<dyn Fn(u128) -> u128>,
@@ -51,15 +58,15 @@ impl MyPlugin {
   // No tags, the function is included on the proxy.
   pub fn run(&mut self) {
     let data = self.data.data;
-    //println!(">>> data is {data}");
+    println!(">>> data is {data}");
     let data = (self.run)(data);
-    //println!(">>> updated data to {data}");
+    println!(">>> updated data to {data}");
     self.data.data = data;
-  }
+  } 
 
-  //pub fn data(&self) -> &Data {
-  //  &self.data
-  //}
+  pub fn data(&self) -> &Data {
+    &self.data
+  }
 
   // If for whichever reason, the proxy cannot or may not have access to a function,
   // the function can be ommited as whown below:
@@ -71,18 +78,11 @@ impl MyPlugin {
   // Private functions are also ignored.
   fn something_private(&self) {
   
-  }
+  } 
 
+ 
 }
 
 
 
-
  
-
-
-
-
-
-
-
