@@ -114,6 +114,6 @@ The first items on the to do list are:
 * enums (return an enum where the fields are proxies),
 * derives (traits derived on a type should be propagated to the proxy).
 
-> ![IMPORTANT]
+> [!IMPORTANT]
 > At the time of writing it is uncertain if the full feature set of Rust can be supported. A plan exists for the items above.
 
