@@ -5,7 +5,7 @@ mod fun;
 
 use proc_macro::{TokenStream};
 use quote::quote;
-use syn::{DeriveInput, Ident, ImplItemFn, ItemImpl};
+use syn::{DeriveInput, Ident, ImplItemFn, ItemImpl, ItemTrait};
 
 
 macro_rules! macro_panic {
@@ -72,6 +72,9 @@ pub fn f_from_c(input: TokenStream) -> TokenStream {
 pub fn proxy(args: TokenStream, input: TokenStream) -> TokenStream {
   if let Ok(input) = syn::parse::<DeriveInput>(input.clone()) {
     return proxy::proxy(args, input);
+  }
+  if let Ok(input) = syn::parse::<ItemTrait>(input.clone()) {
+    return proxy::proxy_trait(args, input);
   }
   if let Ok(item) = syn::parse::<ItemImpl>(input.clone()) {
     return imp::imp(args, item);

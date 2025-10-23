@@ -19,7 +19,6 @@ impl Data {
 }
 
 
-
 const FACTOR: u128 = 2;
 
 // The `#[fproxy::proxy]` macro is the workhorse of the fproxy crate
@@ -31,6 +30,7 @@ const FACTOR: u128 = 2;
 #[derive(FToC, FFromC)]
 pub struct MyPlugin {
   data: Data,
+  counter: usize,
   run: Box<dyn Fn(u128) -> u128>,
 }
 
@@ -51,12 +51,14 @@ impl MyPlugin {
     //println!("creating plugin with data: {data}");
     MyPlugin { 
       data: Data { data }, 
+      counter: 0,
       run: Box::new(|i| i * FACTOR),
     }
   }
 
   // No tags, the function is included on the proxy.
   pub fn run(&mut self) {
+    self.counter += 1;
     let data = self.data.data;
     println!(">>> data is {data}");
     let data = (self.run)(data);
@@ -67,6 +69,18 @@ impl MyPlugin {
   pub fn data(&self) -> &Data {
     &self.data
   }
+  pub fn counter(&self) -> &usize {
+    &self.counter
+  }
+
+  // Iterators are converted to an opaque type which in turn again 
+  // Iterator.
+  // The Item type will be set to the proxy type of the original item.
+  pub fn iter(&self, n: u128) -> impl Iterator<Item = Data> {
+    (0..n)
+      .map(|i| Data { data: (self.run)(i) })
+  } 
+
 
   // If for whichever reason, the proxy cannot or may not have access to a function,
   // the function can be ommited as whown below:
@@ -80,9 +94,15 @@ impl MyPlugin {
   
   } 
 
- 
+
 }
 
 
+/* 
+#[fproxy::proxy]
+trait MyTrait {
+  fn do_something(&mut self);
+  //fn get_result(&self) -> Data;
+}
+*/
 
- 

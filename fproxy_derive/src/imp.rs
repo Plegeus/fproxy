@@ -2,7 +2,63 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, token::Comma, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Type, Visibility};
+use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, Item, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
+
+use crate::tfident;
+
+
+pub(crate) struct Function {
+  // the elements of the function relevant to this macro.
+  attrs: Vec<Attribute>,
+  vis: Visibility,
+  sig: Signature,
+}
+impl Function {
+  /// Given the ident of the type for which this function is 
+  /// implemented, generate the `extern "C"` name.
+  fn extern_c_name(&self, ident: &Ident) -> Ident {
+    Ident::new(&format!("_fproxy_{ident}_{}", &self.sig.ident), ident.span())
+  }
+  fn output(&self, ident: &Ident) -> Quote {
+    match self.sig.output.clone() {
+      ReturnType::Default => quote!(()),
+      ReturnType::Type(_, mut typ) => {
+        match typ.as_mut() {
+          Type::Path(path) if path.path.segments.first().unwrap().ident.to_string() == "Self" => {
+            return quote!(#ident);
+          },
+          Type::Reference(refr) => {
+            refr.lifetime = Some(Lifetime::new("'static", Span::call_site()));
+          }
+          Type::ImplTrait(TypeImplTrait { impl_token: _, bounds }) => {
+            return quote!(Box<dyn #bounds>);
+          },
+          _ => (),
+        };
+        return quote!(#typ);
+      },
+    }
+  }
+}
+
+impl From<&ImplItemFn> for Function {
+  fn from(fun: &ImplItemFn) -> Self {
+    Function { 
+      attrs: fun.attrs.clone(), 
+      vis: fun.vis.clone(), 
+      sig: fun.sig.clone(), 
+    }
+  }
+}
+impl From<&TraitItemFn> for Function {
+  fn from(fun: &TraitItemFn) -> Self {
+    Function { 
+      attrs: fun.attrs.clone(), 
+      vis: Visibility::Public(Pub::default()), 
+      sig: fun.sig.clone(), 
+    }
+  }
+}
 
 
 pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
@@ -11,82 +67,112 @@ pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
     Type::Path(type_path) => type_path.path.get_ident().expect("expected struct"),
     _ => crate::macro_panic!("expected struct"),
   };
-  let funs = input.items
-    .iter()
-    .filter_map(|item| match item {
-      ImplItem::Fn(fun) => Some(fun),
-      _ => None,
-    })
-    .fold(Quote::new(), |mut q, fun| {
-  
-      let imp = Imp::from(fun);
-      // No self parameter, and no constructor, ignore.
-      if !imp.slf.is_some() && !imp.new {
-        return q;
-      }
-      // The users wishes ignore the function or
-      // the function is private.
-      if imp.ignore || imp.prv {
-        return q;
-      }
-      if imp.new && imp.slf.is_some() {
-        crate::macro_panic!("functions annotated with #[fproxy::imp(\"new\") cannot have a self paramter");
-      }
+  let tfident = tfident(ident);
 
-      let input = Input::from(&fun.sig.inputs);
-      let output = make_output(ident, &fun.sig.output);
+  fn iter(input: &ItemImpl) -> impl Iterator<Item = Function> {
+    input.items
+      .iter()
+      .filter_map(|item| match item {
+        ImplItem::Fn(fun) => Some(fun),
+        _ => None,
+      })
+      .map(Function::from)
+  }
 
-      let fname = &fun.sig.ident;
-      let fname = Ident::new(&format!("_fproxy_{ident}_{fname}"), Span::call_site());
+  let funs = make_funs(ident, iter(&input));
+  let c_funs = make_c_funs(ident, iter(&input));
 
-      let body = make_body(
-        &imp, 
-        ident,
-        &fname,
-        &input,
-        &output,
-      );
-      let c_fun = make_c_function(
-        &imp,
-        ident,
-        &fun.sig.ident,
-        &fname,
-        &input,
-        &output,
-      );
-
-      let ffun = make_function(
-        &imp, 
-        &fun.sig.ident, 
-        &input,
-        &output, 
-        &body
-      );
-
-      let tfident = Ident::new(&format!("TF{ident}"), ident.span());
-      q.extend(quote! {
-        impl #tfident<'_> {
-          #ffun
-        }
-        // FIXME: find a way to guarantee/enforce unique names for foreign functions.
-        #[unsafe(no_mangle)]
-        #c_fun
-      });
-
-      q
-    });
-  
 
   quote! {
+
+    impl #tfident<'_> {
+      #funs
+    }
+
     #input
-    #funs
+
+    #c_funs
+
+  }
+    .into()
+}
+pub(crate) fn imp_trait(_: TokenStream, input: ItemTrait) -> TokenStream {
+
+
+  quote! {
+
+    #input
   }
     .into()
 }
 
+fn make_funs(ident: &Ident, funs: impl Iterator<Item = Function>) -> Quote {
+  funs
+    .map(|fun| imp_fun(ident, &fun))
+    .fold(Quote::new(), |q, fun| quote!(#q #fun))
+}
+fn make_c_funs(ident: &Ident, funs: impl Iterator<Item = Function>) -> Quote {
+  funs
+    .map(|fun| imp_c_fun(ident, &fun))
+    .fold(Quote::new(), |q, fun| quote!(#q #fun))
+}
 
-fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &Quote) -> Quote {
 
+fn imp_c_fun(ident: &Ident, fun: &Function) -> Quote {
+  
+  let imp = Imp::from(fun);
+  if imp.should_ignore() {
+    return quote!();
+  }
+
+  let input = Input::from(fun);
+  let fname = fun.extern_c_name(ident);
+
+  // The c function takes FReprC parameters, convert them back to 
+  // the original rust types.
+  let mut input_names = input.names(|name| {
+    quote!(fproxy::FFromC::from_c(#name))
+  });
+
+  // The input needs to be FReprC.
+  // The original input is mapped to there C types.
+  let mut input = input.fold(|q, (ident, typ)| {
+    quote!(#q #ident: <#typ as fproxy::FToC>::CType)
+  });
+
+  if !imp.new {
+    input_names = quote!(fproxy::FFromC::from_c(handle), #input_names);
+    input = quote!(handle: *const (), #input);
+  }
+
+  let name = &fun.sig.ident;
+  // fproxy::FToC::to_c(#ident::#fun(#input_names))
+  let mut body = quote!(#ident::#name(#input_names));
+  // If the return type is an impl, then it must be boxed for transport.
+  if let Some(bounds) = &imp.returns_impl {
+    body = quote!(Box::new(#body) as Box<dyn #bounds>);
+  }
+  let body = quote!(fproxy::FToC::to_c(#body));
+
+  let output = fun.output(ident);
+
+  quote! {
+    /// Inputs and outputs to `extern "C"` functions are `CType`s.
+    #[unsafe(no_mangle)]
+    unsafe extern "C" fn #fname(#input) -> <#output as fproxy::FToC>::CType {
+      #body
+    }
+  } 
+}
+fn imp_fun(ident: &Ident, fun: &Function) -> Quote {
+
+  let imp = Imp::from(fun);
+  if imp.should_ignore() {
+    return quote!();
+  }
+
+  let output = fun.output(ident);
+  let input = Input::from(fun);
   let mut input = input.fold(|q, (ident, typ)| {
     quote!(#q #ident: #typ)
   });
@@ -106,6 +192,9 @@ fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &
     }
   }
 
+  let name = &fun.sig.ident;
+  let body = make_body(ident, fun);
+
   // Inputs and outputs to proxies are proxies.
   quote! {
    pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
@@ -114,29 +203,12 @@ fn make_function(imp: &Imp, name: &Ident, input: &Input, output: &Quote, body: &
   }
 }
 
-fn make_c_function(imp: &Imp, ident: &Ident, fun: &Ident, fname: &Ident, input: &Input, output: &Quote) -> Quote {
-  
-  let mut input_names = input.names(|name| {
-    quote!(fproxy::FFromC::from_c(#name))
-  });
-  let mut input = input.fold(|q, (ident, typ)| {
-    quote!(#q #ident: <#typ as fproxy::FToC>::CType)
-  });
+fn make_body(ident: &Ident, fun: &Function) -> Quote {
 
-  if !imp.new {
-    input_names = quote!(fproxy::FFromC::from_c(handle), #input_names);
-    input = quote!(handle: *const (), #input);
-  }
-
-  quote! {
-    /// Inputs and outputs to `extern "C"` functions are `CType`s.
-    unsafe extern "C" fn #fname(#input) -> <#output as fproxy::FToC>::CType {
-      fproxy::FToC::to_c(#ident::#fun(#input_names))
-    }
-  } 
-}
-fn make_body(imp: &Imp, ident: &Ident, fname: &Ident, input: &Input, output: &Quote) -> Quote {
-
+  let imp = Imp::from(fun);
+  let input = Input::from(fun);
+  let output = fun.output(ident);
+  let fname = fun.extern_c_name(ident);
   let fn_bytes = LitByteStr::new(fname.to_string().as_bytes(), Span::call_site());
   let input_names = input.names(|name| {
     quote!(fproxy::FToC::to_c(#name))
@@ -191,31 +263,13 @@ fn make_body(imp: &Imp, ident: &Ident, fname: &Ident, input: &Input, output: &Qu
           let func: Symbol<unsafe extern "C" fn(*const (), #input) -> <#output as fproxy::FToC>::CType> = 
             self.lib.get(#fn_bytes).unwrap();
           fproxy::FProxyFrom::<'l>::proxy_from(
-            func(self.handle), 
+            func(self.handle, #input_names), 
             &self.lib
           )
         }
       }
     }
 
-  }
-}
-
-fn make_output(ident: &Ident, out: &ReturnType) -> Quote {
-  match out.clone() {
-    ReturnType::Default => quote!(()),
-    ReturnType::Type(_, mut typ) => {
-      match typ.as_mut() {
-        Type::Path(path) if path.path.segments.first().unwrap().ident.to_string() == "Self" => {
-          return quote!(#ident);
-        },
-        Type::Reference(refr) => {
-          refr.lifetime = Some(Lifetime::new("'static", Span::call_site()));
-        }
-        _ => (),
-      };
-      return quote!(#typ);
-    },
   }
 }
 
@@ -226,16 +280,26 @@ struct Imp {
   new: bool,              // Whether the function is constructor.
   lib: bool,              // Whether the library is owned by the proxy (needed for the constructor).
   ignore: bool,           // Whether the function is explicitly ignored.
+  returns_impl: Option<Punctuated<TypeParamBound, Token![+]>>, // Whether the function returns `impl T`
 }
-impl From<&ImplItemFn> for Imp {
-  fn from(fun: &ImplItemFn) -> Self {
+impl Imp {
+  fn should_ignore(&self) -> bool {
+    (!self.slf.is_some() && !self.new) ||
+    self.prv || 
+    self.ignore
+  }
+}
+
+impl From<&Function> for Imp {
+  fn from(fun: &Function) -> Self {
     // This is bad.
     let tag = fun.attrs
       .iter()
       .filter(|atr| atr.to_token_stream().to_string().contains("fproxy"))
       .next()
       .map_or(String::new(), |atr| atr.to_token_stream().to_string());
-    Imp { 
+    
+    let mut imp = Imp { 
       slf: if let Some(FnArg::Receiver(slf)) = fun.sig.inputs.first() {
         Some(slf.clone())
       } else {
@@ -245,7 +309,20 @@ impl From<&ImplItemFn> for Imp {
       new: tag.contains("new"), 
       lib: tag.contains("lib"), 
       ignore: tag.contains("ignore"),
+      returns_impl: None,
+    };
+
+    if let ReturnType::Type(_, typ) = fun.sig.output.clone() {
+      if let Type::ImplTrait(TypeImplTrait { impl_token: _, bounds }) = *typ {
+        imp.returns_impl = Some(bounds);
+      }
     }
+
+    if imp.new && imp.slf.is_some() {
+      crate::macro_panic!("function {} is annotated with #[fproxy::imp(\"new\"), it cannot have a self paramter", &fun.sig.ident);
+    }
+
+    imp
   }
 }
 
@@ -283,8 +360,10 @@ impl Input {
 
 }
 
-impl From<&Punctuated<FnArg, Comma>> for Input { 
-  fn from(punct: &Punctuated<FnArg, Comma>) -> Self {
+impl From<&Function> for Input { 
+  fn from(fun: &Function) -> Self {
+
+    let punct = &fun.sig.inputs;
 
     /// Remove the `self` parameter and convert to identifiers and types. </br>
     /// The macro needs the type of `self` in order to do the requiered conversions. </br>
@@ -304,7 +383,4 @@ impl From<&Punctuated<FnArg, Comma>> for Input {
     }
   }
 }
-
-
-
 
