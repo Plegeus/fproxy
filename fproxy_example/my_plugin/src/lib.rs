@@ -1,10 +1,13 @@
 
 
+pub mod test;
+
 use fproxy;
 
 
-/*
+
 #[fproxy::proxy]
+#[derive(Default)]
 pub struct Data {
   data: u128,
 }
@@ -14,7 +17,7 @@ impl Data {
   pub fn read(&self) -> u128 {
     self.data
   }
-}
+} 
 
 
 const FACTOR: u128 = 2;
@@ -92,14 +95,25 @@ impl MyPlugin {
   } 
 
 
+  pub fn get_trait(&self) -> impl MyTrait {
+    Data::default()
+  }
+  pub fn get_trait_ref(&self) -> &dyn MyTrait {
+    &self.data
+  }
+
 }
- */
+
 
 
 #[fproxy::proxy]
-trait MyTrait {
+pub trait MyTrait {
   fn do_something(&mut self);
-  //fn get_result(&self) -> Data;
 }
-
+impl MyTrait for Data {
+  fn do_something(&mut self) {
+    self.data = 0;
+    println!("Data is reset!");
+  }
+}
 

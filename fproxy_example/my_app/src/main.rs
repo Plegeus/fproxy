@@ -33,4 +33,7 @@ fn main() {
     println!("iter: {}", data.read());
   }
 
+  let mut my_trait = plug.get_trait();
+  my_trait.do_something();
+
 }

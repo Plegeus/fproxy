@@ -64,7 +64,7 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
     .into()
 }
 
-fn fident(ident: &Ident) -> Ident {
+pub(crate) fn fident(ident: &Ident) -> Ident {
   Ident::new(&format!("F{ident}"), ident.span())
 }
 fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
@@ -156,38 +156,86 @@ pub(crate) fn proxy_trait(args: TokenStream, ast: ItemTrait) -> TokenStream {
 
 fn imp_trait(ident: &Ident, ast: ItemTrait) -> Quote {
 
-  let name = trait_imp_ident(ident);
+  //let name = trait_imp_ident(ident);
   // only handles functions, ignore e.g., associated types, bad.
-  let impls = ast.items
-    .iter()
-    .filter_map(|item| match item {
-      TraitItem::Fn(f) => Some(f),
-      _ => None,
-    })
-    .fold(Quote::new(), |q, item| quote!(#q #item));
+  //let impls = ast.items
+  //  .iter()
+  //  .filter_map(|item| match item {
+  //    TraitItem::Fn(f) => Some(f),
+  //    _ => None,
+  //  })
+  //  .fold(Quote::new(), |q, item| quote!(#q #item));
 
   quote! {
 
-    struct #name(Box<dyn #ident>);
-    impl #ident for #name {
-      fproxy::delegate::delegate! {
-        to self.0 {
-          #impls
-        }
+    //struct #name(Box<dyn #ident>);
+    //impl #ident for #name {
+    //  fproxy::delegate::delegate! {
+    //    to self.0 {
+    //      #impls
+    //    }
+    //  }
+    //}
+
+    //fproxy::impl_f_to_c!(impl fproxy, #name);
+    //fproxy::impl_f_from_c!(impl fproxy, #name);
+
+    fproxy::impl_f_to_c!(impl fproxy, Box<dyn #ident>);
+    fproxy::impl_f_from_c!(impl fproxy, Box<dyn #ident>);
+
+    impl fproxy::FToC for &dyn #ident {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        self as *const dyn #ident as *const ()
+      }
+    }
+    impl fproxy::FToC for &mut dyn #ident {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        self as *mut dyn #ident as *mut () as *const ()
+      }
+    }
+    impl fproxy::FFromC for &dyn #ident {
+      unsafe fn from_c(c_type: Self::CType) -> Self {
+        &**<&Box<dyn #ident> as fproxy::FFromC>::from_c(c_type)
+      }
+    }
+    impl fproxy::FFromC for &mut dyn #ident {
+      unsafe fn from_c(c_type: Self::CType) -> Self {
+        &mut **<&mut Box<dyn #ident> as fproxy::FFromC>::from_c(c_type)
       }
     }
 
-    fproxy::impl_f_from_c!(impl fproxy, #name);
-    fproxy::impl_f_to_c!(impl fproxy, #name);
+    //fproxy::impl_f_from_c!(impl fproxy, Box<dyn #ident>);
+
+    /*
+    impl fproxy::FToC for Box<dyn #ident> {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        Box::into_raw(self) as *const ()
+      }
+    }
+    impl fproxy::FToC for &Box<dyn #ident> {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        self as *const Box<dyn #ident> as *const ()
+      }
+    }
+    impl fproxy::FToC for &mut Box<dyn #ident> {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        self as *mut Box<dyn #ident> as *mut () as *const ()
+      }
+    } */
 
 
   }
 }
 
-/// Generates the name for a concrete type implementing trait `ident`.
-pub(crate) fn trait_imp_ident(ident: &Ident) -> Ident {
-  Ident::new(&format!("FImp{ident}"), ident.span())
-}
+///// Generates the name for a concrete type implementing trait `ident`.
+//pub(crate) fn trait_imp_ident(ident: &Ident) -> Ident {
+//  Ident::new(&format!("FImp{ident}"), ident.span())
+//}
 
 
 
