@@ -50,8 +50,6 @@ impl Default for Input {
 pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   
   let ident = ast.ident.clone();
-  let tfident = tfident (&ident);
-  //let fident = Ident::new(&format!("F{ident}"), ident.span());
   let input: Input = syn::parse(args)
     .expect("failed to parse args");
 
@@ -59,6 +57,8 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   
   quote! {
     #fstruct
+    fproxy::impl_f_from_c!(impl fproxy, #ident);
+    fproxy::impl_f_to_c!(impl fproxy, #ident);
     #ast
   }
     .into()
@@ -138,19 +138,56 @@ fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
   }
 }
 
-pub(crate) fn proxy_trait(_: TokenStream, ast: ItemTrait) -> TokenStream {
+pub(crate) fn proxy_trait(args: TokenStream, ast: ItemTrait) -> TokenStream {
   
-  let fstruct = proxy_fstruct(&ast.ident, &Input::as_trait());
+  let ident = &ast.ident;
+  let fstruct = proxy_fstruct(ident, &Input::as_trait());
+  let imp: Quote = crate::imp::imp_trait(args, ast.clone()).into();
+  let imp_trait = imp_trait(ident, ast.clone());
 
   quote! {
     #fstruct 
+    #imp_trait
+    #imp
     #ast
   }
     .into()
 }
 
+fn imp_trait(ident: &Ident, ast: ItemTrait) -> Quote {
+
+  let name = trait_imp_ident(ident);
+  // only handles functions, ignore e.g., associated types, bad.
+  let impls = ast.items
+    .iter()
+    .filter_map(|item| match item {
+      TraitItem::Fn(f) => Some(f),
+      _ => None,
+    })
+    .fold(Quote::new(), |q, item| quote!(#q #item));
+
+  quote! {
+
+    struct #name(Box<dyn #ident>);
+    impl #ident for #name {
+      fproxy::delegate::delegate! {
+        to self.0 {
+          #impls
+        }
+      }
+    }
+
+    fproxy::impl_f_from_c!(impl fproxy, #name);
+    fproxy::impl_f_to_c!(impl fproxy, #name);
 
 
+  }
+}
+
+/// Generates the name for a concrete type implementing trait `ident`.
+pub(crate) fn trait_imp_ident(ident: &Ident) -> Ident {
+  Ident::new(&format!("FImp{ident}"), ident.span())
+}
 
 
 

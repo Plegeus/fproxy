@@ -1,12 +1,10 @@
 
 
 use fproxy;
-use fproxy::{FToC, FFromC};
 
 
-
+/*
 #[fproxy::proxy]
-#[derive(FToC, FFromC)]
 pub struct Data {
   data: u128,
 }
@@ -27,7 +25,6 @@ const FACTOR: u128 = 2;
 // Ommiting "lib" still requires a library object, the proxy will store 
 // a reference to a Library object.
 #[fproxy::proxy("lib")]
-#[derive(FToC, FFromC)]
 pub struct MyPlugin {
   data: Data,
   counter: usize,
@@ -96,13 +93,13 @@ impl MyPlugin {
 
 
 }
+ */
 
 
-/* 
 #[fproxy::proxy]
 trait MyTrait {
   fn do_something(&mut self);
   //fn get_result(&self) -> Data;
 }
-*/
+
 

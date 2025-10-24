@@ -1,19 +1,76 @@
 
+use std::fmt::Display;
+
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, Item, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
+use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, DeriveInput, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
 
-use crate::tfident;
+use crate::{proxy::trait_imp_ident, tfident};
 
 
-pub(crate) struct Function {
+pub(crate) struct ItemDetails {
+  ident: Ident,
+  is_trait: bool,
+}
+impl ItemDetails {
+  /// The ident to which a function should delegate.
+  /// For structs: 
+  /// ```rust
+  /// MyStruct::a_method()
+  /// ```
+  /// for traits:
+  /// ```rust
+  /// FImpMyTrait::a_method()
+  /// ```
+  fn delegate(&self) -> Ident {
+    if self.is_trait {
+      trait_imp_ident(&self.ident)
+    } else {
+      self.ident.clone()
+    }
+  }
+}
+
+impl From<&ItemImpl> for ItemDetails {
+  fn from(input: &ItemImpl) -> Self {
+    ItemDetails { 
+      ident: match input.self_ty.as_ref() {
+        Type::Path(type_path) => type_path.path.get_ident().expect("expected struct").clone(),
+        _ => crate::macro_panic!("expected struct"),
+      }, 
+      is_trait: false,
+    }
+  }
+}
+impl From<&ItemTrait> for ItemDetails {
+  fn from(item: &ItemTrait) -> Self {
+    ItemDetails { 
+      ident: item.ident.clone(), 
+      is_trait: true, 
+    }
+  }
+}
+
+impl Display for ItemDetails {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&format!("{}", &self.ident))
+  }
+}
+impl ToTokens for ItemDetails {
+  fn to_tokens(&self, tokens: &mut Quote) {
+    self.ident.to_tokens(tokens);
+  }
+}
+
+
+pub(crate) struct FunctionDetails {
   // the elements of the function relevant to this macro.
   attrs: Vec<Attribute>,
   vis: Visibility,
   sig: Signature,
 }
-impl Function {
+impl FunctionDetails {
   /// Given the ident of the type for which this function is 
   /// implemented, generate the `extern "C"` name.
   fn extern_c_name(&self, ident: &Ident) -> Ident {
@@ -41,18 +98,18 @@ impl Function {
   }
 }
 
-impl From<&ImplItemFn> for Function {
+impl From<&ImplItemFn> for FunctionDetails {
   fn from(fun: &ImplItemFn) -> Self {
-    Function { 
+    FunctionDetails { 
       attrs: fun.attrs.clone(), 
       vis: fun.vis.clone(), 
       sig: fun.sig.clone(), 
     }
   }
 }
-impl From<&TraitItemFn> for Function {
+impl From<&TraitItemFn> for FunctionDetails {
   fn from(fun: &TraitItemFn) -> Self {
-    Function { 
+    FunctionDetails { 
       attrs: fun.attrs.clone(), 
       vis: Visibility::Public(Pub::default()), 
       sig: fun.sig.clone(), 
@@ -63,25 +120,21 @@ impl From<&TraitItemFn> for Function {
 
 pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
 
-  let ident = match input.self_ty.as_ref() {
-    Type::Path(type_path) => type_path.path.get_ident().expect("expected struct"),
-    _ => crate::macro_panic!("expected struct"),
-  };
-  let tfident = tfident(ident);
+  let item = ItemDetails::from(&input);
+  let tfident = tfident(&item.ident);
 
-  fn iter(input: &ItemImpl) -> impl Iterator<Item = Function> {
+  fn iter(input: &ItemImpl) -> impl Iterator<Item = FunctionDetails> {
     input.items
       .iter()
       .filter_map(|item| match item {
         ImplItem::Fn(fun) => Some(fun),
         _ => None,
       })
-      .map(Function::from)
+      .map(FunctionDetails::from)
   }
 
-  let funs = make_funs(ident, iter(&input));
-  let c_funs = make_c_funs(ident, iter(&input));
-
+  let funs = make_funs(&item, iter(&input));
+  let c_funs = make_c_funs(&item, iter(&input));
 
   quote! {
 
@@ -98,27 +151,51 @@ pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
 }
 pub(crate) fn imp_trait(_: TokenStream, input: ItemTrait) -> TokenStream {
 
+  let item = ItemDetails::from(&input);
+  let tfident = tfident(&item.ident);
+
+  fn iter(input: &ItemTrait) -> impl Iterator<Item = FunctionDetails> {
+    input.items
+      .iter()
+      .filter_map(|item| {
+        match item {
+          TraitItem::Fn(fun) => {
+            Some(FunctionDetails::from(fun))
+          },
+          _ => None,
+        }
+      })
+  }
+
+  let funs = make_funs(&item, iter(&input));
+  let c_funs = make_c_funs(&item, iter(&input));
+
 
   quote! {
 
-    #input
+    impl #tfident<'_> {
+      #funs
+    }
+
+    #c_funs
+
   }
     .into()
 }
 
-fn make_funs(ident: &Ident, funs: impl Iterator<Item = Function>) -> Quote {
+fn make_funs(ident: &ItemDetails, funs: impl Iterator<Item = FunctionDetails>) -> Quote {
   funs
     .map(|fun| imp_fun(ident, &fun))
     .fold(Quote::new(), |q, fun| quote!(#q #fun))
 }
-fn make_c_funs(ident: &Ident, funs: impl Iterator<Item = Function>) -> Quote {
+fn make_c_funs(ident: &ItemDetails, funs: impl Iterator<Item = FunctionDetails>) -> Quote {
   funs
     .map(|fun| imp_c_fun(ident, &fun))
     .fold(Quote::new(), |q, fun| quote!(#q #fun))
 }
 
 
-fn imp_c_fun(ident: &Ident, fun: &Function) -> Quote {
+fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   
   let imp = Imp::from(fun);
   if imp.should_ignore() {
@@ -126,7 +203,7 @@ fn imp_c_fun(ident: &Ident, fun: &Function) -> Quote {
   }
 
   let input = Input::from(fun);
-  let fname = fun.extern_c_name(ident);
+  let fname = fun.extern_c_name(&item.ident);
 
   // The c function takes FReprC parameters, convert them back to 
   // the original rust types.
@@ -146,15 +223,17 @@ fn imp_c_fun(ident: &Ident, fun: &Function) -> Quote {
   }
 
   let name = &fun.sig.ident;
+  let delegate = item.delegate();
+
   // fproxy::FToC::to_c(#ident::#fun(#input_names))
-  let mut body = quote!(#ident::#name(#input_names));
+  let mut body = quote!(#delegate::#name(#input_names));
   // If the return type is an impl, then it must be boxed for transport.
   if let Some(bounds) = &imp.returns_impl {
     body = quote!(Box::new(#body) as Box<dyn #bounds>);
   }
   let body = quote!(fproxy::FToC::to_c(#body));
 
-  let output = fun.output(ident);
+  let output = fun.output(&item.ident);
 
   quote! {
     /// Inputs and outputs to `extern "C"` functions are `CType`s.
@@ -164,14 +243,14 @@ fn imp_c_fun(ident: &Ident, fun: &Function) -> Quote {
     }
   } 
 }
-fn imp_fun(ident: &Ident, fun: &Function) -> Quote {
+fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
   let imp = Imp::from(fun);
   if imp.should_ignore() {
     return quote!();
   }
 
-  let output = fun.output(ident);
+  let output = fun.output(&item.ident);
   let input = Input::from(fun);
   let mut input = input.fold(|q, (ident, typ)| {
     quote!(#q #ident: #typ)
@@ -193,7 +272,7 @@ fn imp_fun(ident: &Ident, fun: &Function) -> Quote {
   }
 
   let name = &fun.sig.ident;
-  let body = make_body(ident, fun);
+  let body = make_body(item, fun);
 
   // Inputs and outputs to proxies are proxies.
   quote! {
@@ -203,12 +282,12 @@ fn imp_fun(ident: &Ident, fun: &Function) -> Quote {
   }
 }
 
-fn make_body(ident: &Ident, fun: &Function) -> Quote {
+fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
   let imp = Imp::from(fun);
   let input = Input::from(fun);
-  let output = fun.output(ident);
-  let fname = fun.extern_c_name(ident);
+  let output = fun.output(&item.ident);
+  let fname = fun.extern_c_name(&item.ident);
   let fn_bytes = LitByteStr::new(fname.to_string().as_bytes(), Span::call_site());
   let input_names = input.names(|name| {
     quote!(fproxy::FToC::to_c(#name))
@@ -243,7 +322,7 @@ fn make_body(ident: &Ident, fun: &Function) -> Quote {
           use fproxy::libloading::{Library, Symbol};
           use fproxy::{FToC};
           let lib = #_lib;
-          let func: Symbol<unsafe extern "C" fn(#input) -> <#ident as FToC>::CType> = 
+          let func: Symbol<unsafe extern "C" fn(#input) -> <#item as FToC>::CType> = 
             lib.get(#fn_bytes).unwrap();
           Self {
             handle: func(#input_names),
@@ -290,8 +369,8 @@ impl Imp {
   }
 }
 
-impl From<&Function> for Imp {
-  fn from(fun: &Function) -> Self {
+impl From<&FunctionDetails> for Imp {
+  fn from(fun: &FunctionDetails) -> Self {
     // This is bad.
     let tag = fun.attrs
       .iter()
@@ -360,8 +439,8 @@ impl Input {
 
 }
 
-impl From<&Function> for Input { 
-  fn from(fun: &Function) -> Self {
+impl From<&FunctionDetails> for Input { 
+  fn from(fun: &FunctionDetails) -> Self {
 
     let punct = &fun.sig.inputs;
 

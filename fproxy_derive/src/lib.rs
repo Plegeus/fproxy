@@ -41,7 +41,7 @@ pub fn f_into_proxy(input: TokenStream) -> TokenStream {
   }
     .into()
 } */
-
+/*
 #[proc_macro_derive(FToC)]
 pub fn f_to_c(input: TokenStream) -> TokenStream {
   
@@ -65,7 +65,7 @@ pub fn f_from_c(input: TokenStream) -> TokenStream {
     fproxy::impl_f_from_c!(impl fproxy, #ident);
   }
     .into()
-}
+} */
 
 
 #[proc_macro_attribute]

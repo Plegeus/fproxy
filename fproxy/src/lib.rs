@@ -8,6 +8,7 @@ pub mod std;
 
 pub use fproxy_derive::*;
 pub use libloading;
+pub use delegate;
 pub use proxy::{FProxy, FOwned, FRef, FRefMut};
 pub use convert::{FProxyFrom, FAsProxy, FToC, FFromC};
 // Users should be able to `use fproxy::iter::...`
