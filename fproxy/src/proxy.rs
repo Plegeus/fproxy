@@ -10,6 +10,35 @@ pub enum FAllocated<'a, T: ?Sized> {
   RefMut(&'a mut T),
 }
 
+impl<'a, T: ?Sized> Deref for FAllocated<'a, T> {
+  type Target = T;
+  fn deref(&self) -> &Self::Target {
+    match self {
+      FAllocated::Box(b) => &**b,
+      FAllocated::Ref(r) => *r,
+      FAllocated::RefMut(r) => *r,
+    }
+  }
+}
+impl<'a, T: ?Sized> DerefMut for FAllocated<'a, T> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    match self {
+      FAllocated::Box(b) => &mut **b,
+      FAllocated::Ref(_) => panic!(),
+      FAllocated::RefMut(r) => *r,
+    }
+  }
+}
+
+impl<T> Clone for FAllocated<'_, T> {
+  fn clone(&self) -> Self {
+    match self {
+      FAllocated::Ref(r) => FAllocated::Ref(*r),
+      _ => panic!(),
+    }
+  }
+}
+
 
 /// Trait to control proxies from the application. <br/>
 /// Everything that is a proxy implements this trait,
@@ -25,31 +54,22 @@ pub trait FProxy {
 
 /// Owned representation of a proxy. <br/>
 /// When `Self` is dropped, the proxy will be freed.
+#[derive(Clone)]
 pub struct FOwned<F: FProxy> {
   pub proxy: F,
 }
 
-impl<F> Clone for FOwned<F>
-where 
-  F: FProxy + Clone 
-{
-  fn clone(&self) -> Self {
-    FOwned { 
-      proxy: self.proxy.clone()
-    }
-  }
-}
-impl<F> Drop for FOwned<F> 
-where 
-  F: FProxy
-{
-  fn drop(&mut self) {
-    // safety: self is dropped.
-    unsafe {
-      self.proxy.free();
-    }
-  }
-}
+//impl<F> Drop for FOwned<F> 
+//where 
+//  F: FProxy
+//{
+//  fn drop(&mut self) {
+//    // safety: self is dropped.
+//    unsafe {
+//      self.proxy.free();
+//    }
+//  }
+//}
 
 impl<F> Deref for FOwned<F>
 where 
