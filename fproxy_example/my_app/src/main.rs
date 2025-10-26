@@ -36,7 +36,10 @@ fn main() {
  */
   let mut my_trait = plug.get_trait();
   my_trait.do_something();
-  let mut my_trait = plug.get_trait_ref();
+  let mut my_trait = plug.get_trait_mut();
+  my_trait.do_something();
+  
+  let my_trait = plug.get_trait_ref();
   //my_trait.do_something(); // cannot borrow as mutable!
   my_trait.do_something_else(123);
   

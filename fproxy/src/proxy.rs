@@ -1,13 +1,13 @@
 
-use std::{ops::{Deref, DerefMut}, sync::Arc};
+use std::{ops::{Deref, DerefMut}};
 use libloading::Library;
 use crate::FProxyFrom;
 
 
 pub enum FAllocated<'a, T: ?Sized> {
   Box(Box<T>),
-  Arc(Arc<&'a T>),
-  ArcMut(Arc<&'a mut T>),
+  Ref(&'a T),
+  RefMut(&'a mut T),
 }
 
 
@@ -29,6 +29,16 @@ pub struct FOwned<F: FProxy> {
   pub proxy: F,
 }
 
+impl<F> Clone for FOwned<F>
+where 
+  F: FProxy + Clone 
+{
+  fn clone(&self) -> Self {
+    FOwned { 
+      proxy: self.proxy.clone()
+    }
+  }
+}
 impl<F> Drop for FOwned<F> 
 where 
   F: FProxy
@@ -157,6 +167,8 @@ where
       .into()
   }
 }
+
+
 
 
 

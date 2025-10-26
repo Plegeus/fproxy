@@ -101,6 +101,9 @@ impl MyPlugin {
   pub fn get_trait_ref(&self) -> &dyn MyTrait {
     &self.data
   }
+  pub fn get_trait_mut(&mut self) -> &mut dyn MyTrait {
+    &mut self.data
+  }
 
 }
 

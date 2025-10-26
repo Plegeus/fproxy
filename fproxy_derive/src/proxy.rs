@@ -185,7 +185,8 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
     #[unsafe(no_mangle)]
     unsafe extern "C" fn #cfree(handle: *const ()) {
       use fproxy::FAllocated;
-      let falloc = handle as *mut FAllocated<dyn #ident>;
+      use std::sync::Arc;
+      let falloc = handle as *mut Arc<FAllocated<dyn #ident>>;
       Box::from_raw(falloc);
     }
     
@@ -194,15 +195,17 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
       type FSelf = fproxy::FRef<#tfident<'l>>;
     }
     impl<'l> fproxy::FAsProxy<'l> for &mut dyn #ident {
-      type FSelf = fproxy::FRef<#tfident<'l>>;
+      type FSelf = fproxy::FRefMut<#tfident<'l>>;
     }
 
 
     impl fproxy::FToC for Box<dyn #ident> {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
+        use fproxy::FAllocated;
+        use std::sync::Arc;
         Box::into_raw(
-          Box::new(fproxy::FAllocated::<dyn #ident>::Box(self))
+          Box::new(Arc::new(FAllocated::<dyn #ident>::Box(self)))
         ) as *const ()
       }
     }
@@ -210,42 +213,46 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
     impl fproxy::FToC for &dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
+        use fproxy::FAllocated;
+        use std::sync::Arc;
         Box::into_raw(
-          Box::new(fproxy::FAllocated::<dyn #ident>::Arc(std::sync::Arc::new(self)))
+          Box::new(Arc::new(FAllocated::<dyn #ident>::Ref(self)))
         ) as *const ()
       }
     }
     impl fproxy::FToC for &mut dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
+        use fproxy::FAllocated;
+        use std::sync::Arc;
         Box::into_raw(
-          Box::new(fproxy::FAllocated::<dyn #ident>::ArcMut(std::sync::Arc::new(self)))
+          Box::new(Arc::new(FAllocated::<dyn #ident>::RefMut(self)))
         ) as *const ()
       }
     }
     impl fproxy::FFromC for &dyn #ident {
       unsafe fn from_c(c_type: Self::CType) -> Self {
         use fproxy::FAllocated;
-        let falloc = &*(c_type as *const FAllocated::<dyn #ident>);
-        match falloc {
+        use std::sync::Arc;
+        use std::ops::Deref;
+        let arc = &*(c_type as *const Arc<FAllocated<dyn #ident>>);
+        match (*arc).deref() {
           FAllocated::Box(b) => &**b,
-          FAllocated::Arc(a) => **a,
-          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &dyn #ident`"),
+          FAllocated::Ref(r) => *r,
+          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &dyn #ident`, FAllocated unmatched."),
         }
       }
     }
     impl fproxy::FFromC for &mut dyn #ident {
       unsafe fn from_c(c_type: Self::CType) -> Self {
         use fproxy::FAllocated;
-        let falloc = &mut *(c_type as *mut FAllocated::<dyn #ident>);
-        match falloc {
+        use std::sync::Arc;
+        use std::ops::Deref;
+        let arc = &mut *(c_type as *mut Arc<FAllocated<dyn #ident>>);
+        match Arc::get_mut(arc).expect("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &mut dyn #ident`, Arc::get_mut failed.") {
           FAllocated::Box(b) => &mut **b,
-          FAllocated::ArcMut(a) => {
-            use std::sync::Arc;
-            use std::ops::Deref;
-            *((*a).deref() as *const Self as *mut Self) // This is cursed.
-          },
-          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &mut dyn #ident`"),
+          FAllocated::RefMut(r) => *r,
+          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &mut dyn #ident`, FAllocated unmatched."),
         }
       }
     }
