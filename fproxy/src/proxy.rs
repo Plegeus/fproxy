@@ -1,10 +1,14 @@
 
-use std::ops::{Deref, DerefMut};
-
+use std::{ops::{Deref, DerefMut}, sync::Arc};
 use libloading::Library;
-use safer_ffi::{derive_ReprC, layout::ReprC};
-
 use crate::FProxyFrom;
+
+
+pub enum FAllocated<'a, T: ?Sized> {
+  Box(Box<T>),
+  Arc(Arc<&'a T>),
+  ArcMut(Arc<&'a mut T>),
+}
 
 
 /// Trait to control proxies from the application. <br/>
@@ -22,10 +26,10 @@ pub trait FProxy {
 /// Owned representation of a proxy. <br/>
 /// When `Self` is dropped, the proxy will be freed.
 pub struct FOwned<F: FProxy> {
-  proxy: F,
+  pub proxy: F,
 }
 
-impl<F> Drop for FOwned<F>
+impl<F> Drop for FOwned<F> 
 where 
   F: FProxy
 {
@@ -153,5 +157,7 @@ where
       .into()
   }
 }
+
+
 
 

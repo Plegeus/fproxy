@@ -52,13 +52,48 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   let ident = ast.ident.clone();
   let input: Input = syn::parse(args)
     .expect("failed to parse args");
+  let tfident = tfident(&ident);
 
   let fstruct = proxy_fstruct(&ident, &input);
   
+  let cfree: Ident = Ident::new(&format!("_fproxy_{ident}_FProxy_free"), ident.span());
+  let cfree_bytes = LitByteStr::new(cfree.to_string().as_bytes(), Span::call_site());
+  
   quote! {
+    
     #fstruct
+    
     fproxy::impl_f_from_c!(impl fproxy, #ident);
     fproxy::impl_f_to_c!(impl fproxy, #ident);
+
+    impl fproxy::FProxy for #tfident<'_> {
+      unsafe fn free(&mut self) {
+        let func: fproxy::libloading::Symbol<unsafe extern "C" fn(*const ())> = 
+          self.lib.get(#cfree_bytes).unwrap();
+        func(self.handle);
+      }
+    }
+
+    #[unsafe(no_mangle)]
+    unsafe extern "C" fn #cfree(handle: *const ()) {
+      Box::from_raw(handle as *mut #ident);
+    }
+
+    #ast
+  }
+    .into()
+}
+pub(crate) fn proxy_trait(args: TokenStream, ast: ItemTrait) -> TokenStream {
+  
+  let ident = &ast.ident;
+  let fstruct = proxy_fstruct(ident, &Input::as_trait());
+  let imp: Quote = crate::imp::imp_trait(args, ast.clone()).into();
+  let imp_trait = imp_trait(ident, ast.clone());
+
+  quote! {
+    #fstruct 
+    #imp_trait
+    #imp
     #ast
   }
     .into()
@@ -85,7 +120,6 @@ fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
   } else {
     quote!(
       type #tfident<'l> = #fident<'l>;
-      #[derive(Clone, Copy)]
       pub struct #fident<'l> {
         pub handle: *const (),
         pub lib: &'l fproxy::libloading::Library,
@@ -113,17 +147,10 @@ fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
     final_ident = quote!(Box<dyn #final_ident>);
   }
   
-
   quote! {
 
     #_struct
     #proxy_from
-
-    impl fproxy::FProxy for #tfident<'_> {
-      unsafe fn free(&mut self) {
-        Box::from_raw(self.handle as *mut #final_ident);
-      }
-    }
 
     impl<'l> fproxy::FAsProxy<'l> for #final_ident {
       type FSelf = fproxy::FOwned<#tfident<'l>>;
@@ -138,104 +165,93 @@ fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
   }
 }
 
-pub(crate) fn proxy_trait(args: TokenStream, ast: ItemTrait) -> TokenStream {
+fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
   
-  let ident = &ast.ident;
-  let fstruct = proxy_fstruct(ident, &Input::as_trait());
-  let imp: Quote = crate::imp::imp_trait(args, ast.clone()).into();
-  let imp_trait = imp_trait(ident, ast.clone());
+  let tfident = tfident(ident);
 
-  quote! {
-    #fstruct 
-    #imp_trait
-    #imp
-    #ast
-  }
-    .into()
-}
-
-fn imp_trait(ident: &Ident, ast: ItemTrait) -> Quote {
-
-  //let name = trait_imp_ident(ident);
-  // only handles functions, ignore e.g., associated types, bad.
-  //let impls = ast.items
-  //  .iter()
-  //  .filter_map(|item| match item {
-  //    TraitItem::Fn(f) => Some(f),
-  //    _ => None,
-  //  })
-  //  .fold(Quote::new(), |q, item| quote!(#q #item));
-
+  let cfree: Ident = Ident::new(&format!("_fproxy_{ident}_FProxy_free"), ident.span());
+  let cfree_bytes = LitByteStr::new(cfree.to_string().as_bytes(), Span::call_site());
+  
   quote! {
 
-    //struct #name(Box<dyn #ident>);
-    //impl #ident for #name {
-    //  fproxy::delegate::delegate! {
-    //    to self.0 {
-    //      #impls
-    //    }
-    //  }
-    //}
+    impl fproxy::FProxy for #tfident<'_> {
+      unsafe fn free(&mut self) {
+        let func: fproxy::libloading::Symbol<unsafe extern "C" fn(*const ())> = 
+          self.lib.get(#cfree_bytes).unwrap();
+        func(self.handle);
+      }
+    }
 
-    //fproxy::impl_f_to_c!(impl fproxy, #name);
-    //fproxy::impl_f_from_c!(impl fproxy, #name);
+    #[unsafe(no_mangle)]
+    unsafe extern "C" fn #cfree(handle: *const ()) {
+      use fproxy::FAllocated;
+      let falloc = handle as *mut FAllocated<dyn #ident>;
+      Box::from_raw(falloc);
+    }
+    
 
-    fproxy::impl_f_to_c!(impl fproxy, Box<dyn #ident>);
-    fproxy::impl_f_from_c!(impl fproxy, Box<dyn #ident>);
+    impl<'l> fproxy::FAsProxy<'l> for &dyn #ident {
+      type FSelf = fproxy::FRef<#tfident<'l>>;
+    }
+    impl<'l> fproxy::FAsProxy<'l> for &mut dyn #ident {
+      type FSelf = fproxy::FRef<#tfident<'l>>;
+    }
+
+
+    impl fproxy::FToC for Box<dyn #ident> {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        Box::into_raw(
+          Box::new(fproxy::FAllocated::<dyn #ident>::Box(self))
+        ) as *const ()
+      }
+    }
 
     impl fproxy::FToC for &dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
-        self as *const dyn #ident as *const ()
+        Box::into_raw(
+          Box::new(fproxy::FAllocated::<dyn #ident>::Arc(std::sync::Arc::new(self)))
+        ) as *const ()
       }
     }
     impl fproxy::FToC for &mut dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
-        self as *mut dyn #ident as *mut () as *const ()
+        Box::into_raw(
+          Box::new(fproxy::FAllocated::<dyn #ident>::ArcMut(std::sync::Arc::new(self)))
+        ) as *const ()
       }
     }
     impl fproxy::FFromC for &dyn #ident {
       unsafe fn from_c(c_type: Self::CType) -> Self {
-        &**<&Box<dyn #ident> as fproxy::FFromC>::from_c(c_type)
+        use fproxy::FAllocated;
+        let falloc = &*(c_type as *const FAllocated::<dyn #ident>);
+        match falloc {
+          FAllocated::Box(b) => &**b,
+          FAllocated::Arc(a) => **a,
+          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &dyn #ident`"),
+        }
       }
     }
     impl fproxy::FFromC for &mut dyn #ident {
       unsafe fn from_c(c_type: Self::CType) -> Self {
-        &mut **<&mut Box<dyn #ident> as fproxy::FFromC>::from_c(c_type)
+        use fproxy::FAllocated;
+        let falloc = &mut *(c_type as *mut FAllocated::<dyn #ident>);
+        match falloc {
+          FAllocated::Box(b) => &mut **b,
+          FAllocated::ArcMut(a) => {
+            use std::sync::Arc;
+            use std::ops::Deref;
+            *((*a).deref() as *const Self as *mut Self) // This is cursed.
+          },
+          _ => panic!("proxy.rs, fn imp_trait in `impl fproxy::FFromC for &mut dyn #ident`"),
+        }
       }
     }
-
-    //fproxy::impl_f_from_c!(impl fproxy, Box<dyn #ident>);
-
-    /*
-    impl fproxy::FToC for Box<dyn #ident> {
-      type CType = *const ();
-      fn to_c(self) -> Self::CType {
-        Box::into_raw(self) as *const ()
-      }
-    }
-    impl fproxy::FToC for &Box<dyn #ident> {
-      type CType = *const ();
-      fn to_c(self) -> Self::CType {
-        self as *const Box<dyn #ident> as *const ()
-      }
-    }
-    impl fproxy::FToC for &mut Box<dyn #ident> {
-      type CType = *const ();
-      fn to_c(self) -> Self::CType {
-        self as *mut Box<dyn #ident> as *mut () as *const ()
-      }
-    } */
-
 
   }
 }
-
-///// Generates the name for a concrete type implementing trait `ident`.
-//pub(crate) fn trait_imp_ident(ident: &Ident) -> Ident {
-//  Ident::new(&format!("FImp{ident}"), ident.span())
-//}
 
 
 

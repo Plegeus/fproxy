@@ -109,6 +109,9 @@ impl MyPlugin {
 #[fproxy::proxy]
 pub trait MyTrait {
   fn do_something(&mut self);
+  fn do_something_else(&self, i: u128) {
+    println!("doing something else with {i}");
+  }
 }
 impl MyTrait for Data {
   fn do_something(&mut self) {

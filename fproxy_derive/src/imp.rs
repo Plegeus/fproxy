@@ -358,10 +358,13 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   let name = &fun.sig.ident;
   let body = make_body(item, fun);
 
+  let s = name.to_string();
+
   // Inputs and outputs to proxies are proxies.
   quote! {
    pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
-      #body
+      let res = #body;
+      res
     }
   }
 }
