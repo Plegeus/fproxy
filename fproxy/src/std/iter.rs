@@ -110,7 +110,7 @@ where
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn _fproxy_FIterator_next(handle: *const ()) -> *const () {
-  let fiter = &mut *(handle as *mut Box<dyn FDynIterator>);
+  let fiter = unsafe { &mut *(handle as *mut Box<dyn FDynIterator>) };
   fiter.next()
 }
 

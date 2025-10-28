@@ -4,7 +4,7 @@ use std::fmt::Display;
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, DeriveInput, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
+use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
 
 use crate::tfident;
 
@@ -67,7 +67,6 @@ impl ToTokens for ItemDetails {
 
 pub(crate) struct FunctionDetails {
   // the elements of the function relevant to this macro.
-  attrs: Vec<Attribute>,
   vis: Visibility,
   sig: Signature,
   // specific details about the function.
@@ -90,7 +89,6 @@ impl FunctionDetails {
       .map_or(String::new(), |atr| atr.to_token_stream().to_string());
 
     let mut fun = FunctionDetails {
-        attrs,
         vis,
         sig,
         slf: None,
@@ -358,8 +356,6 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   let name = &fun.sig.ident;
   let body = make_body(item, fun);
 
-  let s = name.to_string();
-
   // Inputs and outputs to proxies are proxies.
   quote! {
    pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
@@ -445,12 +441,12 @@ struct Input {
 }
 impl Input {
 
-  fn name(name: &Ident) -> Quote {
-    quote!(#name)
-  }
-  fn pattern(ident: &Ident, typ: &Type) -> Quote {
-    quote!(#ident: #typ)
-  }
+  //fn name(name: &Ident) -> Quote {
+  //  quote!(#name)
+  //}
+  //fn pattern(ident: &Ident, typ: &Type) -> Quote {
+  //  quote!(#ident: #typ)
+  //}
 
   fn fold(&self, f: impl FnMut(Quote, &(Ident, Type)) -> Quote) -> Quote {
     self.names_and_types

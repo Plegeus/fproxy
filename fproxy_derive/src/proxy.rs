@@ -2,7 +2,7 @@
 use proc_macro::{TokenStream};
 use proc_macro2::{Literal, Span, TokenStream as Quote};
 use quote::quote;
-use syn::{DeriveInput, Ident, ItemTrait, LitByteStr, Token, TraitItem};
+use syn::{DeriveInput, Ident, ItemTrait, LitByteStr, Token};
 use syn::parse::{Parse, ParseStream};
 
 use crate::tfident;

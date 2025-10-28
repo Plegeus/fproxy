@@ -2,6 +2,8 @@
 name = "fproxy"
 version = "0.1.0"
 edition = "2024"
+keywords = ["ffi", "rust-to-rust-ffi", "dynamic", "linking"]
+categories = ["development-tools::ffi", "game-development", "game-engines", "rust-patterns"]
 
 [dependencies]
 fproxy_derive = { path = "./../fproxy_derive" }
