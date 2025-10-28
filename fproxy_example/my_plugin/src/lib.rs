@@ -12,8 +12,11 @@ pub struct Data {
   data: u128,
 }
 
-#[fproxy::proxy]
+// When the proxy contains a "tag",
+// only functions marked "tag" will be included.
+#[fproxy::proxy("tag")]
 impl Data {
+  #[fproxy::proxy("tag")]
   pub fn read(&self) -> u128 {
     self.data
   }

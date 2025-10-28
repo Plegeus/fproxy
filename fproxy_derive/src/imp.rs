@@ -1,41 +1,50 @@
 
-use std::fmt::Display;
+use std::{fmt::Display};
 
-use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as Quote};
+use proc_macro::{TokenStream};
+use proc_macro2::{Literal, Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
+use syn::{parse::{Parse, ParseStream}, punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
 
 use crate::tfident;
 
 
+struct Args {
+  tag: bool,
+}
+
+impl Parse for Args {
+  fn parse(input: ParseStream) -> syn::Result<Self> {
+    let mut vec = Vec::new();
+    loop {
+      if let Ok(l) = input.parse::<Literal>() {
+        vec.push(l.to_string().trim_matches('\"').to_string());
+      }
+      if input.parse::<Token![,]>().is_err() {
+        break;
+      }
+    }
+    Ok(Args{
+      tag: vec.contains(&format!("tag")),
+    })
+  }
+}
+impl Default for Args {
+  fn default() -> Self {
+    Args { tag: false }
+  }
+}
 
 pub(crate) struct ItemDetails {
+  args: Args,
   ident: Ident,
   is_trait: bool,
 }
 impl ItemDetails {
-  ///// The ident to which a function should delegate.
-  ///// For structs: 
-  ///// ```rust
-  ///// MyStruct::a_method()
-  ///// ```
-  ///// for traits:
-  ///// ```rust
-  ///// FImpMyTrait::a_method()
-  ///// ```
-  //fn delegate(&self) -> Ident {
-  //  if self.is_trait {
-  //    trait_imp_ident(&self.ident)
-  //  } else {
-  //    self.ident.clone()
-  //  }
-  //}
-}
-
-impl From<&ItemImpl> for ItemDetails {
-  fn from(input: &ItemImpl) -> Self {
+  fn from_impl(args: &TokenStream, input: &ItemImpl) -> Self {
     ItemDetails { 
+      args: syn::parse(args.clone())
+        .expect("failed to parse args"),
       ident: match input.self_ty.as_ref() {
         Type::Path(type_path) => type_path.path.get_ident().expect("expected struct").clone(),
         _ => crate::macro_panic!("expected struct"),
@@ -44,9 +53,11 @@ impl From<&ItemImpl> for ItemDetails {
     }
   }
 }
+
 impl From<&ItemTrait> for ItemDetails {
   fn from(item: &ItemTrait) -> Self {
     ItemDetails { 
+      args: Args::default(),
       ident: item.ident.clone(), 
       is_trait: true, 
     }
@@ -70,6 +81,7 @@ pub(crate) struct FunctionDetails {
   vis: Visibility,
   sig: Signature,
   // specific details about the function.
+  tag: bool,
   slf: Option<Receiver>,  // The self parameter, if present.
   prv: bool,              // Whether the function is private.
   new: bool,              // Whether the function is constructor.
@@ -91,6 +103,7 @@ impl FunctionDetails {
     let mut fun = FunctionDetails {
         vis,
         sig,
+        tag: tag.contains("tag"),
         slf: None,
         prv: false,
         new: tag.contains("new"),
@@ -116,9 +129,9 @@ impl FunctionDetails {
 
     fun
   }
+
   /// Given the ident of the type for which this function is 
   /// implemented, generate the `extern "C"` name.
-  
   fn extern_c_name(&self, ident: &Ident) -> Ident {
     Ident::new(&format!("_fproxy_{ident}_{}", &self.sig.ident), ident.span())
   }
@@ -143,10 +156,11 @@ impl FunctionDetails {
     }
   }
 
-  fn should_ignore(&self) -> bool {
+  fn should_ignore(&self, item: &ItemDetails) -> bool {
     (!self.slf.is_some() && !self.new) ||
     self.prv || 
-    self.ignore
+    self.ignore ||
+    (item.args.tag && !self.tag)
   }
   fn self_as_trait(&self, item: &ItemDetails) -> Option<Quote> {
     if item.is_trait {
@@ -182,9 +196,9 @@ impl From<&TraitItemFn> for FunctionDetails {
 }
 
 
-pub(crate) fn imp(_: TokenStream, input: ItemImpl) -> TokenStream {
+pub(crate) fn imp(args: TokenStream, input: ItemImpl) -> TokenStream {
 
-  let item = ItemDetails::from(&input);
+  let item = ItemDetails::from_impl(&args, &input);
   let tfident = tfident(&item.ident);
 
   fn iter(input: &ItemImpl) -> impl Iterator<Item = FunctionDetails> {
@@ -261,7 +275,7 @@ fn make_c_funs(ident: &ItemDetails, funs: impl Iterator<Item = FunctionDetails>)
 
 fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   
-  if fun.should_ignore() {
+  if fun.should_ignore(item) {
     return quote!();
   }
 
@@ -328,7 +342,7 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 }
 fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
-  if fun.should_ignore() {
+  if fun.should_ignore(item) {
     return quote!();
   }
 
