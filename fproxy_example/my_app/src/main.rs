@@ -3,6 +3,8 @@
 use my_plugin;
 use my_plugin::FMyPlugin;
 
+use fproxy::FLib;
+
 
 fn main() {
     
@@ -12,7 +14,8 @@ fn main() {
   // The path to the library must be given, without file extension of `lib` prefix
   // in order to keep cross-platform compatibility.
   // Other parameters defined in a constructor follow the library.
-  let mut plug = unsafe { FMyPlugin::new("./target/debug/my_plugin", 5) };
+  let lib = FLib::new("./target/debug/my_plugin");
+  let mut plug = unsafe { FMyPlugin::new(lib, 5) };
 
 
   // Functions defined on a foreign type also generate on the proxy.

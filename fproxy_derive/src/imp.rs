@@ -361,7 +361,7 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
     input = quote!(#slf, #input);
   } else {
     if fun.lib {
-      input = quote!(lib: &str, #input);
+      input = quote!(lib: fproxy::FLib, #input);
     } else {
       input = quote!(lib: &'l fproxy::libloading::Library, #input);
     }
@@ -396,20 +396,7 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
     let mut _lib = quote! { lib };
     if fun.lib {
-      _lib = quote! {
-        {
-          let mut lib = std::path::PathBuf::from(lib);
-          #[cfg(target_os = "windows")]
-          lib.set_extension("dll");
-          #[cfg(target_os = "macos")] {
-            let name = lib.file_name().unwrap().to_str().unwrap();
-            let name = format!("lib{name}");
-            lib.set_file_name(name);
-            lib.set_extension("dylib");
-          }
-          Library::new(lib.into_os_string().as_os_str()).unwrap()
-        }
-      };
+      _lib = quote!(lib.0);
     }
 
     quote! {

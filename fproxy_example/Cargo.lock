@@ -62,7 +62,7 @@ checksum = "320bea982e85d42441eb25c49b41218e7eaa2657e8f90bc4eca7437376751e23"
 
 [[package]]
 name = "fproxy"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "delegate",
  "fproxy_derive",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "fproxy_derive"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -148,6 +148,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 name = "my_app"
 version = "0.1.0"
 dependencies = [
+ "fproxy",
  "my_plugin",
 ]
 
