@@ -1,3 +1,14 @@
 [workspace]
 resolver = "3"
 members = ["fproxy", "fproxy_derive"]
+
+version = "0.0.1"
+keywords = ["ffi", "rust-to-rust-ffi", "dynamic", "linking"]
+categories = ["development-tools::ffi", "game-development", "game-engines", "rust-patterns"]
+license = "MIT"
+description = "Facilitate safe rust-to-rust ffi by generating proxies around required types. Useful when a library is loaded at runtime (i.e., dynamic)."
+homepage = "https://github.com/Plegeus/fproxy"
+repository = "https://github.com/Plegeus/fproxy"
+readme = "README.md"
+
+
