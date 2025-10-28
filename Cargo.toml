@@ -2,7 +2,7 @@
 resolver = "3"
 members = ["fproxy", "fproxy_derive"]
 
-version = "0.0.1"
+version = "0.0.2"
 keywords = ["ffi", "rust-to-rust-ffi", "dynamic", "linking"]
 categories = ["development-tools::ffi", "game-development", "game-engines", "rust-patterns"]
 homepage = "https://github.com/Plegeus/fproxy"
