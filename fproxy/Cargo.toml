@@ -8,7 +8,7 @@ license = "MIT"
 description = "Facilitate safe rust-to-rust ffi by generating proxies around required types. Useful when a library is loaded at runtime (i.e., dynamic)."
 homepage = "https://github.com/Plegeus/fproxy"
 repository = "https://github.com/Plegeus/fproxy"
-readme = "README.md"
+readme = "../README.md"
 
 [dependencies]
 fproxy_derive = { path = "./../fproxy_derive", version = "0.0.1" }
