@@ -6,7 +6,7 @@ license = "MIT"
 description = "Facilitate safe rust-to-rust ffi by generating proxies around required types. Useful when a library is loaded at runtime (i.e., dynamic)."
 
 [dependencies]
-fproxy_derive = { path = "./../fproxy_derive", version = "0.0.2" }
+fproxy_derive = { path = "./../fproxy_derive", version = "0.0.3" }
 libloading = "0.8.9"
 safer-ffi = "0.1.13"
 delegate = "0.13.4"
