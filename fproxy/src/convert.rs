@@ -1,4 +1,6 @@
 
+use std::{ffi::{c_char, CStr, CString}, slice};
+
 use libloading::Library;
 use safer_ffi::{derive_ReprC, layout::ReprC};
 
@@ -152,15 +154,6 @@ macro_rules! impl_f_from_c {
 }
  
 
-
-impl<T> FFromC for T
-where 
-  T: FToC + From<T::CType>,
-{
-  unsafe fn from_c(c_type: Self::CType) -> Self {
-    Self::from(c_type)
-  }
-} 
 impl<T> FProxyFrom<'_, T::CType> for T 
 where 
   T: FToC + From<T::CType>
@@ -200,6 +193,11 @@ impl FToC for u128 {
     From::from(self)
   }
 }
+impl FFromC for u128 {
+  unsafe fn from_c(c_type: Self::CType) -> Self {
+    From::from(c_type)
+  }
+}
 
 impl FAsProxy<'_> for u128 {
   type FSelf = Self;
@@ -209,10 +207,56 @@ impl FAsProxy<'_> for U128 {
 }
 
 
+
+#[derive_ReprC]
+#[repr(C)]
+pub struct FStr {
+  data: *const u8,
+  len: usize,
+}
+
+impl FLocal for FStr { }
+
+impl From<&str> for FStr {
+  fn from(s: &str) -> Self {
+    FStr { 
+      len: s.len(),
+      data: s.as_ptr(), 
+    }
+  }
+}
+impl From<FStr> for &str {
+  fn from(fstr: FStr) -> Self {
+    str::from_utf8(
+      unsafe { slice::from_raw_parts(fstr.data, fstr.len) }
+    )
+      .unwrap()
+  }
+}
+
+impl FToC for &str {
+  type CType = FStr;
+  fn to_c(self) -> Self::CType {
+    From::from(self)
+  }
+}
+impl FFromC for &str {
+  unsafe fn from_c(c_type: Self::CType) -> Self {
+    From::from(c_type)
+  }
+}
+
+impl<'l> FAsProxy<'l> for &'l str {
+  type FSelf = &'l str;
+}
+
+
 #[cfg(test)]
 pub mod proxy {
 
-  use super::U128;
+  use crate::{FFromC, FToC};
+
+use super::U128;
 
   #[test]
   fn test_u128() {
@@ -221,6 +265,13 @@ pub mod proxy {
     let u2 = U128::from(u);
     println!("l: {}, r: {}", u2.l, u2.r);
     assert!(u == u128::from(u2));
+  }
+  #[test]
+  fn test_str() {
+    let s = "Hello world!";
+    let cstr = s.to_c();
+    let s2: &str = unsafe { FFromC::from_c(cstr) };
+    assert!(s == s2, "s2: {s2}");
   }
 
 }

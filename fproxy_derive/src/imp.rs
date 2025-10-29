@@ -126,6 +126,9 @@ impl FunctionDetails {
     if fun.new && fun.slf.is_some() {
       crate::macro_panic!("function {} is annotated with #[fproxy::imp(\"new\"), it cannot have a self paramter", &fun.sig.ident);
     }
+    if fun.prv && fun.tag {
+      crate::macro_panic!("function {} is annotated with #[fproxy::imp(\"tag\"), but it is private", &fun.sig.ident);
+    }
 
     fun
   }

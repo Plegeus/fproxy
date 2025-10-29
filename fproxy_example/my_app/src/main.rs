@@ -17,6 +17,7 @@ fn main() {
   let lib = FLib::new("./target/debug/my_plugin");
   let mut plug = unsafe { FMyPlugin::new(lib, 5) };
 
+  plug.print("hello world!");
 
   // Functions defined on a foreign type also generate on the proxy.
   // Like this the dependant binary can use the foreign type with 

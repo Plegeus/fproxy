@@ -59,6 +59,10 @@ impl MyPlugin {
     }
   }
 
+  pub fn print(&self, s: &str) {
+    println!("MyPlugin PRINTS: {s}");
+  }
+
   // No tags, the function is included on the proxy.
   pub fn run(&mut self) {
     self.counter += 1;
