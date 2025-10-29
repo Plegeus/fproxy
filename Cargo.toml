@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["fproxy", "fproxy_derive"]
-#exclude = ["fproxy_example/*"]
 
 keywords = ["ffi", "rust-to-rust-ffi", "dynamic", "linking"]
 categories = ["development-tools::ffi", "game-development", "game-engines", "rust-patterns"]
