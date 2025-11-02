@@ -42,27 +42,27 @@ pub struct FHashMap<'l, KProxy, KCtype, VProxy, VCtype> {
   handle: *const (),
   lib: &'l Library,
 }
-impl<'l, KProxy, KCtype, VProxy, VCtype> FHashMap<'l, KProxy, KCtype, VProxy, VCtype> 
+impl<'l, KProxy, KCType, VProxy, VCType> FHashMap<'l, KProxy, KCType, VProxy, VCType> 
 where 
-  (KCtype, VCtype): FToC,
+  (KCType, VCType): FToC,
 {
 
-  pub fn keys(&self) -> FKeys<'l, KProxy, KCtype> {
+  pub fn keys(&self) -> FIterator<'l, KProxy, KCType> {
     unsafe {
       let func: Symbol<unsafe extern "C" fn(*const ()) -> *const ()> =
         self.lib.get(b"_fproxy_FHashMap_keys\0").unwrap();
-      FKeys(FIterator::proxy_from(func(self.handle), self.lib))
+      FIterator::proxy_from(func(self.handle), self.lib)
     }
   }
-  pub fn values(&self) -> FValues<'l, VProxy, VCtype> {
+  pub fn values(&self) -> FIterator<'l, VProxy, VCType> {
     unsafe {
       let func: Symbol<unsafe extern "C" fn(*const ()) -> *const ()> =
         self.lib.get(b"_fproxy_FHashMap_values\0").unwrap();
-      FValues(FIterator::proxy_from(func(self.handle), self.lib))
+      FIterator::proxy_from(func(self.handle), self.lib)
     }
   }
 
-  pub fn iter(&self) -> FIterator<'l, (KProxy, VProxy), <(KCtype, VCtype) as FToC>::CType> {
+  pub fn iter(&self) -> FIterator<'l, (KProxy, VProxy), <(KCType, VCType) as FToC>::CType> {
     unsafe {
       let func: Symbol<unsafe extern "C" fn(*const ()) -> *const ()> =
         self.lib.get(b"_fproxy_FHashMap_iter\0").unwrap();
@@ -210,32 +210,6 @@ impl<K, V> FFree for FHashMapContainer<K, V> {
   }
 }
 
-
-
-pub struct FKeys<'l, KProxy, KCType>(FIterator<'l, KProxy, KCType>);
-
-impl<'l, KProxy, KCType> Iterator for FKeys<'l, KProxy, KCType> 
-where 
-  KProxy: FProxyFrom<'l, KCType>
-{
-  type Item = KProxy;
-  fn next(&mut self) -> Option<Self::Item> {
-    self.0.next()
-  }
-}
-
-
-pub struct FValues<'l, VProxy, VCType>(FIterator<'l, VProxy, VCType>);
-
-impl<'l, VProxy, VCType> Iterator for FValues<'l, VProxy, VCType> 
-where 
-  VProxy: FProxyFrom<'l, VCType>
-{
-  type Item = VProxy;
-  fn next(&mut self) -> Option<Self::Item> {
-    self.0.next()
-  }
-}
 
 
 #[unsafe(no_mangle)]

@@ -4,7 +4,7 @@ use my_plugin;
 use my_plugin::FMyPlugin;
 
 use fproxy::{FLib, FRef};
-use fproxy::collections::{FHashMap, FKeys};
+use fproxy::collections::{FHashMap};
 use fproxy::iter::FIterator;
 use fproxy::convert::{U128, FStr};
 use std::collections::HashMap;
