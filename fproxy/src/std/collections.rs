@@ -1,7 +1,6 @@
 
 use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 use libloading::{Library, Symbol};
-use safer_ffi::layout::CType;
 use crate::{iter::FIterator, FAsProxy, FFree, FFromC, FProxyFrom, FRef, FToC};
 
 
@@ -14,11 +13,12 @@ where
   type FSelf = FRef<FHashMap<'l, K::FSelf, K::CType, V::FSelf, V::CType>>;
 }
 
-impl<'l, K: 'static, V: 'static> FToC for &HashMap<K, V> 
+impl<'l, K, V> FToC for &'l HashMap<K, V> 
 where 
   &'l K: FToC,
   &'l V: FToC,
-  K: FFromC + Eq + Hash,
+  K: FFromC + Eq + Hash + 'static,
+  V: 'static,
 {
   type CType = *const ();
   fn to_c(self) -> Self::CType {

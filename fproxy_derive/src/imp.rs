@@ -142,7 +142,7 @@ impl FunctionDetails {
   fn output(&self, ident: &Ident, lifetime: Option<&str>) -> Quote {
     match self.sig.output.clone() {
       ReturnType::Default => quote!(()),
-      ReturnType::Type(_, mut typ) => {
+      ReturnType::Type(_, typ) => {
         let mut typ = *typ;
         if lifetime.is_none() {
           typ = remove_lifetimes(&typ);

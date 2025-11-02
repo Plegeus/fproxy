@@ -40,6 +40,8 @@ pub trait FLocal { }
 /// Trait to indicate a type is `#[repr(C)]`
 pub trait FReprC: ReprC + FLocal { }
 
+impl<T: FReprC> FReprC for *const T { }
+impl<T: FReprC> FReprC for *mut T { }
 
 //impl<T: ReprC + FLocal> FReprC for T { }
 
@@ -64,8 +66,8 @@ macro_rules! impl_primitive {
     impl FReprC for $T { }
     //impl FReprC for &$T { }
     //impl FReprC for &mut $T { }
-    impl FReprC for *const $T { }
-    impl FReprC for *mut $T { }
+    //impl FReprC for *const $T { }
+    //impl FReprC for *mut $T { }
 
     /*
     impl FToC for $T {
@@ -304,6 +306,7 @@ mod primitives {
 
   impl FLocal for *mut c_char { }
   impl FReprC for *mut c_char { }
+
   impl FToC for String {
     type CType = *mut c_char;
     fn to_c(self) -> Self::CType {
@@ -327,6 +330,15 @@ mod primitives {
     type FSelf = String;
   }
 
+  impl<'l> FToC for &'l String {
+    type CType = <&'l str as FToC>::CType;
+    fn to_c(self) -> Self::CType {
+      self.as_str().to_c()
+    }
+  }
+  impl<'l> FAsProxy<'_> for &'l String {
+    type FSelf = &'l str;
+  }
 
   impl FProxyFrom<'_, FStr> for &str {
     fn proxy_from(value: FStr, _: &'_ Library) -> Self {
@@ -334,15 +346,12 @@ mod primitives {
     }
   }
   
-
   impl FToC for &&str {
     type CType = FStr;
     fn to_c(self) -> Self::CType {
       (*self).to_c()
     }
   }
-
-
 
 
 
