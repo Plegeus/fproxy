@@ -7,6 +7,7 @@ use fproxy::{FLib, FRef};
 use fproxy::collections::{FHashMap, FKeys};
 use fproxy::iter::FIterator;
 use fproxy::convert::{U128, FStr};
+use std::collections::HashMap;
 
 
 fn main() {
@@ -64,5 +65,7 @@ fn main() {
   for (k, v) in iter {
     println!("{k}: {v}");
   }
+  let map = HashMap::from(map);
+  println!("{map:?}");
 
 }

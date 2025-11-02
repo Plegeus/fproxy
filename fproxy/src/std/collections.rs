@@ -93,9 +93,15 @@ impl<KProxy, KCtype, VProxy, VCtype> FFree for FHashMap<'_, KProxy, KCtype, VPro
   }
 }
 
-impl<KProxy, KCtype, VProxy, VCtype> From<&FHashMap<'_, KProxy, KCtype, VProxy, VCtype>> for HashMap<KProxy, VProxy> {
-  fn from(value: &FHashMap<'_, KProxy, KCtype, VProxy, VCtype>) -> Self {
-    unimplemented!()
+impl<'l, KProxy, KCtype, VProxy, VCtype> From<FRef<FHashMap<'l, KProxy, KCtype, VProxy, VCtype>>> for HashMap<KProxy, VProxy> 
+where 
+  FIterator<'l, (KProxy, VProxy), <(KCtype, VCtype) as FToC>::CType>: Iterator<Item = (KProxy, VProxy)>,
+  (KCtype, VCtype): FToC,
+  KProxy: Eq + Hash
+{
+  fn from(fmap: FRef<FHashMap<'l, KProxy, KCtype, VProxy, VCtype>>) -> Self {
+    fmap.iter()
+      .collect()
   }
 }
 
