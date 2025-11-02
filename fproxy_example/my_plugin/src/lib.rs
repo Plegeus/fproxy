@@ -1,8 +1,7 @@
-
-
-pub mod test;
+#![allow(warnings)]
 
 use fproxy;
+use std::collections::HashMap;
 
 
 
@@ -33,15 +32,26 @@ const FACTOR: u128 = 2;
 #[fproxy::proxy("lib")]
 pub struct MyPlugin {
   data: Data,
+  map: HashMap<&'static str, u128>,
   counter: usize,
   run: Box<dyn Fn(u128) -> u128>,
 }
+
+const DATA: Data = Data { data: 8192 };
 
 // To allow customisability, impl must be annotated with a similar macro call.
 // By default, all functions in the `impl` are generated for the proxy, 
 // unless there is no `self` parameter.
 #[fproxy::proxy]
 impl MyPlugin {
+
+  pub fn assoc() -> &'static Data {
+    &DATA
+  }
+
+  pub fn map(&self) -> &HashMap<&'static str, u128> {
+    &self.map
+  }
 
   // Tagging a function with "new" indicates this is a constructor for the proxy,
   // in which case the function will be implemented on the proxy.
@@ -55,6 +65,14 @@ impl MyPlugin {
     MyPlugin { 
       data: Data { data }, 
       counter: 0,
+      map: vec![
+        ("one", 111),
+        ("two", 222),
+        ("three", 333),
+        ("four", 444),
+      ]
+        .into_iter()
+        .collect(),
       run: Box::new(|i| i * FACTOR),
     }
   }

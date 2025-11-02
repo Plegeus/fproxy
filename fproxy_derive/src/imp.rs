@@ -4,6 +4,7 @@ use std::{fmt::Display};
 use proc_macro::{TokenStream};
 use proc_macro2::{Literal, Span, TokenStream as Quote};
 use quote::{quote, ToTokens};
+use regex::Regex;
 use syn::{parse::{Parse, ParseStream}, punctuated::Punctuated, token::{Comma, Pub}, Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, ItemTrait, Lifetime, LitByteStr, Pat, Receiver, ReturnType, Signature, Token, TraitItem, TraitItemFn, Type, TypeImplTrait, TypeParamBound, Visibility};
 
 use crate::tfident;
@@ -138,16 +139,22 @@ impl FunctionDetails {
   fn extern_c_name(&self, ident: &Ident) -> Ident {
     Ident::new(&format!("_fproxy_{ident}_{}", &self.sig.ident), ident.span())
   }
-  fn output(&self, ident: &Ident) -> Quote {
+  fn output(&self, ident: &Ident, lifetime: Option<&str>) -> Quote {
     match self.sig.output.clone() {
       ReturnType::Default => quote!(()),
       ReturnType::Type(_, mut typ) => {
-        match typ.as_mut() {
+        let mut typ = *typ;
+        if lifetime.is_none() {
+          typ = remove_lifetimes(&typ);
+        }
+        match &mut typ {
           Type::Path(path) if path.path.segments.first().unwrap().ident.to_string() == "Self" => {
             return quote!(#ident);
           },
           Type::Reference(refr) => {
-            refr.lifetime = Some(Lifetime::new("'static", Span::call_site()));
+            if let Some(lt) = lifetime {
+              refr.lifetime = Some(Lifetime::new(lt, Span::call_site()));
+            }
           }
           Type::ImplTrait(TypeImplTrait { impl_token: _, bounds }) => {
             return quote!(Box<dyn #bounds>);
@@ -160,7 +167,7 @@ impl FunctionDetails {
   }
 
   fn should_ignore(&self, item: &ItemDetails) -> bool {
-    (!self.slf.is_some() && !self.new) ||
+    //(!self.slf.is_some() && !self.new) ||
     self.prv || 
     self.ignore ||
     (item.args.tag && !self.tag)
@@ -300,7 +307,7 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
     quote!(#q #ident: <#typ as fproxy::FToC>::CType)
   });
 
-  if !fun.new {
+  if fun.slf.is_some(){
     input_names = if let Some(slf) = fun.self_as_trait(item) {
       quote!(
         <#slf as fproxy::FFromC>::from_c(handle), 
@@ -333,7 +340,7 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
     }
   };
 
-  let output = fun.output(&item.ident);
+  let output = fun.output(&item.ident, Some("'static"));
 
   quote! {
     /// Inputs and outputs to `extern "C"` functions are `CType`s.
@@ -349,7 +356,7 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
     return quote!();
   }
 
-  let output = fun.output(&item.ident);
+  let output = fun.output(&item.ident, None);
   let input = Input::from(fun);
   let mut input = input.fold(|q, (ident, typ)| {
     quote!(#q #ident: #typ)
@@ -376,8 +383,7 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   // Inputs and outputs to proxies are proxies.
   quote! {
    pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
-      let res = #body;
-      res
+      #body
     }
   }
 }
@@ -385,7 +391,7 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
   let input = Input::from(fun);
-  let output = fun.output(&item.ident);
+  let output = fun.output(&item.ident, Some("'static"));
   let fname = fun.extern_c_name(&item.ident);
   let fn_bytes = LitByteStr::new(fname.to_string().as_bytes(), Span::call_site());
   let input_names = input.names(|name| {
@@ -421,15 +427,24 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
   } else {
 
+    let mut input = input;
+    let mut func = quote!(func(#input_names));
+    let mut lib = quote!(lib);
+    if fun.slf.is_some() {
+      input = quote!(*const (), #input);
+      func = quote!(func(self.handle, #input_names));
+      lib = quote!(self.lib);
+    }
+
     quote! {
       {
         unsafe {
           use fproxy::libloading::{Symbol};
-          let func: Symbol<unsafe extern "C" fn(*const (), #input) -> <#output as fproxy::FToC>::CType> = 
-            self.lib.get(#fn_bytes).unwrap();
+          let func: Symbol<unsafe extern "C" fn(#input) -> <#output as fproxy::FToC>::CType> = 
+            #lib.get(#fn_bytes).unwrap();
           fproxy::FProxyFrom::<'l>::proxy_from(
-            func(self.handle, #input_names), 
-            &self.lib
+            #func, 
+            &#lib
           )
         }
       }
@@ -438,6 +453,13 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   }
 }
 
+
+fn remove_lifetimes(ty: &Type) -> Type {
+  let s = ty.to_token_stream().to_string();
+  let re = Regex::new(r"'(?:[a-zA-Z0-9_]+|static)").unwrap();
+  let s = re.replace_all(&s, "").into_owned();
+  syn::parse(s.parse().unwrap()).unwrap()
+} 
 
 /// Dismantles the input into tuples of `Ident` and `Type`. </br>
 struct Input {
@@ -496,4 +518,11 @@ impl From<&FunctionDetails> for Input {
     }
   }
 }
+
+
+
+
+
+
+
 

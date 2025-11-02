@@ -43,7 +43,11 @@ impl<T> Clone for FAllocated<'_, T> {
 /// Trait to control proxies from the application. <br/>
 /// Everything that is a proxy implements this trait,
 /// it is automatically implemented with `#[fproxy::proxy]`.
-pub trait FProxy {
+pub trait FProxy: FFree { }
+
+/// For managing memory allocation on proxies and values
+/// within proxies.
+pub trait FFree {
   /// Frees allocated memory in the library. </br>
   /// ### Safety ###
   /// The caller must ensure `self` is dropped after.
@@ -52,24 +56,15 @@ pub trait FProxy {
   }
 }
 
+impl<T: FFree> FProxy for T { }
+
+
 /// Owned representation of a proxy. <br/>
 /// When `Self` is dropped, the proxy will be freed.
 #[derive(Clone)]
 pub struct FOwned<F: FProxy> {
   pub proxy: F,
 }
-
-//impl<F> Drop for FOwned<F> 
-//where 
-//  F: FProxy
-//{
-//  fn drop(&mut self) {
-//    // safety: self is dropped.
-//    unsafe {
-//      self.proxy.free();
-//    }
-//  }
-//}
 
 impl<F> Deref for FOwned<F>
 where 
@@ -147,7 +142,7 @@ where
 
 /// Like `FRef<F>`, but for mutable references.
 pub struct FRefMut<F: FProxy> {
-  proxy: F,
+  pub proxy: F,
 }
 
 impl<F> Deref for FRefMut<F>

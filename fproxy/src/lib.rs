@@ -8,10 +8,11 @@ pub mod std;
 
 pub use fproxy_derive::*;
 pub use libloading;
+pub use safer_ffi;
 pub use delegate;
-pub use proxy::{FAllocated, FProxy, FOwned, FRef, FRefMut};
-pub use convert::{FProxyFrom, FAsProxy, FToC, FFromC};
-use ::std::{path::Path};
+pub use proxy::{FAllocated, FProxy, FFree, FOwned, FRef, FRefMut};
+pub use convert::{FLocal, FProxyFrom, FAsProxy, FToC, FFromC};
+use ::std::{ops::Deref, path::Path};
 // Users should be able to `use fproxy::iter::...`
 pub use std::*;
 
@@ -25,17 +26,25 @@ impl FLib {
   /// returns `Err`.
   pub fn new(path: impl AsRef<Path>) -> Self {
     unsafe {
-      let mut lib = path.as_ref().to_path_buf();
-      #[cfg(target_os = "windows")]
-      lib.set_extension("dll");
-      #[cfg(target_os = "macos")] {
-        let name = lib.file_name().unwrap().to_str().unwrap();
-        let name = format!("lib{name}");
-        lib.set_file_name(name);
-        lib.set_extension("dylib");
-      }
-      FLib(Library::new(lib.into_os_string().as_os_str()).unwrap())
+      //let mut lib = path.as_ref().to_path_buf();
+      //#[cfg(target_os = "windows")]
+      //lib.set_extension("dll");
+      //#[cfg(target_os = "macos")] {
+      //  let name = lib.file_name().unwrap().to_str().unwrap();
+      //  let name = format!("lib{name}");
+      //  lib.set_file_name(name);
+      //  lib.set_extension("dylib");
+      //}
+      //FLib(Library::new(lib.into_os_string().as_os_str()).unwrap())
+      FLib(Library::new(path.as_ref().as_os_str()).unwrap())
     }
+  }
+}
+
+impl Deref for FLib {
+  type Target = Library;
+  fn deref(&self) -> &Self::Target {
+    &self.0
   }
 }
 

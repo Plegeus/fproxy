@@ -1,30 +1,75 @@
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Deref};
 use libloading::{Library, Symbol};
-use crate::{FAsProxy, FProxyFrom, FToC};
+use crate::{proxy::FFree, FAsProxy, FOwned, FProxy, FProxyFrom, FRef, FRefMut, FToC};
 
 
-type RustIterator<T> = Box<dyn Iterator<Item = T>>;
+type RustIterator<'l, T> = Box<dyn Iterator<Item = T> + 'l>;
 
 /// Associate a proxy to rust's iterators.
 /// `T` is the rust type returned from the function implemented
 /// on the type inside the library.
 /// `T` will be converted to a `CType`, which then needs to be
 /// converted to a `Proxy`.
-impl<'l, T> FAsProxy<'l> for RustIterator<T> 
+impl<'l, T> FAsProxy<'l> for RustIterator<'_, T> 
 where 
   T: FToC + FAsProxy<'l>,
 {
-  type FSelf = FIterator<'l, T::FSelf, T::CType>;
+  type FSelf = FOwned<FIterator<'l, T::FSelf, T::CType>>;
+}
+/// Analogous to `RustIterator<'l, T>`.
+impl<'l, T> FAsProxy<'l> for &RustIterator<'_, T> 
+where 
+  T: FToC + FAsProxy<'l>,
+{
+  type FSelf = FRef<FIterator<'l, T::FSelf, T::CType>>;
+}
+/// Analogous to `RustIterator<'l, T>`.
+impl<'l, T> FAsProxy<'l> for &mut RustIterator<'_, T> 
+where 
+  T: FToC + FAsProxy<'l>,
+{
+  type FSelf = FRefMut<FIterator<'l, T::FSelf, T::CType>>;
 }
 
-impl<T: FToC> FToC for RustIterator<T> {
+impl<I> Iterator for FOwned<I> 
+where 
+  I: Iterator + FProxy
+{
+  type Item = I::Item;
+  fn next(&mut self) -> Option<Self::Item> {
+    self.proxy.next()
+  }
+}
+impl<I> Iterator for FRefMut<I> 
+where 
+  I: Iterator + FProxy
+{
+  type Item = I::Item;
+  fn next(&mut self) -> Option<Self::Item> {
+    self.proxy.next()
+  }
+}
+
+impl<T: FToC> FToC for RustIterator<'_, T> {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
-    let cont = FIterContainer::new(self);
-    let fdyn_iter = Box::new(cont) as Box<dyn FDynIterator>;
-    let boxed = Box::new(fdyn_iter);
-    Box::into_raw(boxed) as *const ()
+    FIterContainer::from(self)
+      .to_c()
+  }
+}
+impl<T: FToC> FToC for &RustIterator<'_, T> {
+  type CType = *const ();
+  fn to_c(self) -> Self::CType {
+    FIterContainer::from(self)
+      .to_c()
+  }
+}
+impl<T: FToC> FToC for &mut RustIterator<'_, T> {
+  type CType = *const ();
+  fn to_c(self) -> Self::CType {
+    FIterContainer::from(self)
+      .to_c()
   }
 }
 
@@ -36,6 +81,16 @@ pub struct FIterator<'l, Proxy, CType> {
   handle: *const (), // pointer to FIterContainer
   lib: &'l Library,
 }
+impl<Proxy, CType> FFree for FIterator<'_, Proxy, CType> {
+  unsafe fn free(&mut self) {
+    unsafe {
+      let func: Symbol<unsafe extern "C" fn(*const ())> =
+        self.lib.get(b"_fproxy_FIterator_free\0").unwrap();
+      func(self.handle);
+    }
+  }
+}
+
 impl<'l, Proxy, CType> FProxyFrom<'l, *const ()> for FIterator<'l, Proxy, CType> {
   fn proxy_from(handle: *const (), lib: &'l Library) -> Self {
     FIterator { 
@@ -51,22 +106,68 @@ impl<'l, Proxy, CType> FProxyFrom<'l, *const ()> for FIterator<'l, Proxy, CType>
 /// A wrapper around an iterator, store next to allow 
 /// for a pointer to be passed over the dll boundary.
 /// Always remains within the dll.
-pub struct FIterContainer<T: FToC> {
-  iterator: RustIterator<T>, // The iterator itself.
+pub struct FIterContainer<'l, T: FToC> {
+  iter: *const RustIterator<'l, T>, // The iterator itself.
   next: Option<T::CType>, // The next item.
 }
-impl<T: FToC> FIterContainer<T> {
-  fn new(iterator: RustIterator<T>) -> Self {
-    FIterContainer { 
-      iterator, 
-      next: None,
+impl<'l, T: FToC> Deref for FIterContainer<'l, T> {
+  type Target = RustIterator<'l, T>;
+  fn deref(&self) -> &Self::Target {
+    unsafe {
+      &*self.iter
     }
   }
 }
 
-impl<T: FToC> FDynIterator for FIterContainer<T> {
+impl<T: FToC> FToC for FIterContainer<'_, T> {
+  type CType = *const ();
+  fn to_c(self) -> Self::CType {
+    let b: Box<dyn FDynIterator> = Box::new(self);
+    Box::into_raw(Box::new(b)) as *const ()
+  }
+}
+
+impl<'l, T: FToC> From<*mut RustIterator<'l, T>> for FIterContainer<'l, T> {
+  fn from(iter: *mut RustIterator<'l, T>) -> Self {
+    Self::from(iter as *const RustIterator<T>)
+  }
+}
+impl<'l, T: FToC> From<*const RustIterator<'l, T>> for FIterContainer<'l, T> {
+  fn from(iter: *const RustIterator<'l, T>) -> Self {
+    FIterContainer { 
+      iter, 
+      next: None 
+    }
+  }
+}
+impl<'l, T: FToC> From<RustIterator<'l, T>> for FIterContainer<'l, T> {
+  fn from(iter: RustIterator<'l, T>) -> Self {
+    Self::from(Box::into_raw(Box::new(iter)))
+  }
+}
+impl<'l, T: FToC> From<&RustIterator<'l, T>> for FIterContainer<'l, T> {
+  fn from(iter: &RustIterator<'l, T>) -> Self {
+    Self::from(iter as *const RustIterator<T>)
+  }
+}
+impl<'l, T: FToC> From<&mut RustIterator<'l, T>> for FIterContainer<'l, T> {
+  fn from(iter: &mut RustIterator<'l, T>) -> Self {
+    Self::from(iter as *mut RustIterator<T>)
+  }
+}
+
+
+impl<T: FToC> FFree for FIterContainer<'_, T> {
+  unsafe fn free(&mut self) {
+    unsafe {
+      Box::from_raw(self.iter as *mut RustIterator<T>);
+    }
+  }
+}
+impl<T: FToC> FDynIterator for FIterContainer<'_, T> {
   fn next(&mut self) -> *const () {
-    self.next = self.iterator.next().map(FToC::to_c);
+    let iter = unsafe { &mut *(self.iter as *mut RustIterator<T>) };
+    self.next = iter.next().map(FToC::to_c);
     if let Some(item) = self.next.as_ref() {
       item as *const T::CType as *const ()
     } else {
@@ -77,7 +178,7 @@ impl<T: FToC> FDynIterator for FIterContainer<T> {
 
 
 /// Trait specifically designed for `FIterContainer`.
-trait FDynIterator {
+pub(in super) trait FDynIterator: FFree {
   fn next(&mut self) -> *const ();
 }
 
@@ -102,10 +203,12 @@ where
       // next is called again, the previous result is overridden.
       // The behavious below mimics a move.
       let c_value: CType = std::mem::transmute_copy(&*ptr);
-      Some(FProxyFrom::proxy_from(c_value, &self.lib))
+      let r = Some(FProxyFrom::proxy_from(c_value, &self.lib));
+      r
     }
   }
 }
+
 
 
 #[unsafe(no_mangle)]
@@ -113,6 +216,17 @@ unsafe extern "C" fn _fproxy_FIterator_next(handle: *const ()) -> *const () {
   let fiter = unsafe { &mut *(handle as *mut Box<dyn FDynIterator>) };
   fiter.next()
 }
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn _fproxy_FIterator_free(handle: *const ()) {
+  unsafe {
+    let fiter = &mut *(handle as *mut Box<dyn FDynIterator>);
+    fiter.free();
+  }
+}
+
+
+
 
 
 

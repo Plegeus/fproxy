@@ -66,7 +66,7 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
     fproxy::impl_f_from_c!(impl fproxy, #ident);
     fproxy::impl_f_to_c!(impl fproxy, #ident);
 
-    impl fproxy::FProxy for #tfident<'_> {
+    impl fproxy::FFree for #tfident<'_> {
       unsafe fn free(&mut self) {
         let func: fproxy::libloading::Symbol<unsafe extern "C" fn(*const ())> = 
           self.lib.get(#cfree_bytes).unwrap();
@@ -177,7 +177,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
   
   quote! {
 
-    impl fproxy::FProxy for #tfident<'_> {
+    impl fproxy::FFree for #tfident<'_> {
       unsafe fn free(&mut self) {
         let func: fproxy::libloading::Symbol<unsafe extern "C" fn(*const ())> = 
           self.lib.get(#cfree_bytes).unwrap();

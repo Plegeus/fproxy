@@ -3,7 +3,10 @@
 use my_plugin;
 use my_plugin::FMyPlugin;
 
-use fproxy::FLib;
+use fproxy::{FLib, FRef};
+use fproxy::collections::{FHashMap, FKeys};
+use fproxy::iter::FIterator;
+use fproxy::convert::{U128, FStr};
 
 
 fn main() {
@@ -14,7 +17,14 @@ fn main() {
   // The path to the library must be given, without file extension of `lib` prefix
   // in order to keep cross-platform compatibility.
   // Other parameters defined in a constructor follow the library.
-  let lib = FLib::new("./target/debug/my_plugin");
+  #[cfg(target_os = "macos")]
+  let lib = FLib::new("./target/debug/libmy_plugin.dylib");
+  #[cfg(target_os = "windows")]
+  let lib = FLib::new("./target/debug/my_plugin.dll");
+
+  let data = FMyPlugin::assoc(&lib);
+  println!("{}", data.read());
+
   let mut plug = unsafe { FMyPlugin::new(lib, 5) };
 
   plug.print("hello world!");
@@ -48,6 +58,11 @@ fn main() {
   }
 
   my_trait.do_something_else(123);
-  
+
+  let map = plug.map();
+  let iter: FIterator<(&str, u128), _> = map.iter();
+  for (k, v) in iter {
+    println!("{k}: {v}");
+  }
 
 }

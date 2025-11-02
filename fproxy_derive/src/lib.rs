@@ -4,6 +4,7 @@ mod imp;
 mod fun;
 
 use proc_macro::{TokenStream};
+use quote::quote;
 use syn::{DeriveInput, Ident, ImplItemFn, ItemImpl, ItemTrait};
 
 
@@ -41,6 +42,26 @@ pub fn proxy(args: TokenStream, input: TokenStream) -> TokenStream {
     return fun::fun(args, item);
   }
   panic!("expected impl of fn");
+}
+
+
+#[proc_macro_attribute]
+pub fn repr_c(_: TokenStream, input: TokenStream) -> TokenStream {
+  let input: DeriveInput = syn::parse(input).unwrap();
+  let ident = &input.ident;
+  quote! {
+    
+    #[fproxy::safer_ffi::derive_ReprC]
+    #[repr(C)]
+    #input
+
+    impl fproxy::FLocal for #ident { }
+    impl fproxy::FAsProxy<'_> for #ident {
+      type FSelf = Self;
+    }
+
+  }
+    .into()
 }
 
 
