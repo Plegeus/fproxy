@@ -37,10 +37,10 @@ fn main() {
   //  let i: i32 = i;
   //  println!("{i}");
   //}
-  for i in plug.get_refrs() {
-    let i: &i32 = i;
-    println!("{i}");
-  }
+  //for i in plug.get_refrs() {
+  //  let i: &i32 = i;
+  //  println!("{i}");
+  //}
 
 
   /*
@@ -80,16 +80,17 @@ fn main() {
   //  println!("{v}");
   //}
   
-  /*
-  let iter: FIterator<'_, (&&str, &i32), _> = 
+
+  let map: FRef<FHashMap<'_, &str, i32>> = plug.map();
+  let iter: FOwned<FIterator<'_, (&str, &i32)>> = 
     map.iter();
   for (k, v) in iter {
-    let v: &i32 = v;
-    let k: &&str = k;
     println!("{k}: {v}");
   }
-  */
-  //let map = HashMap::from(map);
-  //println!("{map:?}");
+
+  let map: HashMap<_, _> = map.iter()
+    .map(|(k, v)| (k, *v))
+    .collect();
+  println!("{map:?}");
 
 }

@@ -1,13 +1,29 @@
 
 use libloading::{Library, Symbol};
 
-use crate::{iter::FIterator, FAsProxy, FFree, FFromC, FRef, FToC};
+use crate::{iter::FIterator, FAsProxy, FFree, FFromC, FOwned, FProxyFrom, FRef, FToC};
 use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
 
+// Setup proxy.
 impl<'l, K, V> FAsProxy<'l> for &'l HashMap<K, V> {
   type FSelf = FRef<FHashMap<'l, K, V>>;
 }
+/*
+impl<'l, K, V> From<FRef<FHashMap<'l, K, V>>> for HashMap<K::FSelf, V::FSelf> 
+where 
+  K: FAsProxy<'l> + 'static,
+  V: FAsProxy<'l> + 'static,
+  &'l K: FAsProxy<'l>,
+  &'l V: FAsProxy<'l>,
+{
+  fn from(fmap: FRef<FHashMap<'l, K, V>>) -> Self {
+    fmap.iter()
+      .map(Clone::clone)
+      .collect()
+  }
+} */
+
 
 pub struct FHashMap<'l, K, V> {
   k_marker: PhantomData<K>,
@@ -16,7 +32,18 @@ pub struct FHashMap<'l, K, V> {
   lib: &'l Library,
 }
 impl<'l, K, V> FHashMap<'l, K, V> {
-
+  pub fn iter(&self) -> FOwned<FIterator<'l, <(&'l K, &'l V) as FAsProxy<'l>>::FSelf>>
+  where   
+    &'l K: FAsProxy<'l>,
+    &'l V: FAsProxy<'l>,
+  {
+    unsafe {
+      let func: Symbol<unsafe extern "C" fn(*const ()) -> *const ()> =
+        self.lib.get(b"_fproxy_FHashMap_iter\0").unwrap();
+      FIterator::proxy_from(func(self.handle), self.lib)
+        .into()
+    }
+  }
 }
 
 impl<K, V> FFree for FHashMap<'_, K, V> {
@@ -28,9 +55,31 @@ impl<K, V> FFree for FHashMap<'_, K, V> {
     }
   }
 }
+impl<'l, K, V> FToC for &'l HashMap<K, V> 
+where
+  K: Eq + Hash + 'static,
+  V: 'static,
+  &'l K: FToC,
+  &'l V: FToC,
+{
+  type CType = *const ();
+  fn to_c(self) -> Self::CType {
+    FHashMapContainer::from(self)
+      .to_c()
+  }
+}
+impl<'l, K, V> FProxyFrom<'l, *const ()> for FHashMap<'l, K, V> {
+  fn proxy_from(handle: *const (), lib: &'l Library) -> Self {
+    FHashMap { 
+      k_marker: PhantomData,
+      v_marker: PhantomData,
+      handle, 
+      lib, 
+    }
+  }
+}
 
-
-
+// Setup type containers.
 trait FDynHashMap<'l>: FFree {
   fn iter(&'l self) -> *const ();
 }
@@ -73,11 +122,12 @@ impl<K, V> From<&mut HashMap<K, V>> for FHashMapContainer<K, V> {
 }
 
 
-impl<'l, K: 'static, V: 'static> FDynHashMap<'l> for FHashMapContainer<K, V> 
+impl<'l, K, V> FDynHashMap<'l> for FHashMapContainer<K, V> 
 where 
+  K: Eq + Hash + 'static,
+  V: 'static,
   &'l K: FToC,
   &'l V: FToC,
-  K: FFromC + Eq + Hash,
 {
   fn iter(&'l self) -> *const () {
     let iter: Box<dyn Iterator<Item = (&K, &V)>> = Box::new(
@@ -89,11 +139,12 @@ where
   }
 }
 
-impl<'l, K: 'static, V: 'static> FToC for FHashMapContainer<K, V> 
+impl<'l, K, V> FToC for FHashMapContainer<K, V> 
 where 
+  K: Eq + Hash + 'static,
+  V: 'static,
   &'l K: FToC,
   &'l V: FToC,
-  K: FFromC + Eq + Hash,
 {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
@@ -113,11 +164,6 @@ impl<K, V> FFree for FHashMapContainer<K, V> {
 
 
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn _fproxy_FHashMap_iter(handle: *const ()) -> *const () {
-  let map = unsafe { &*(handle as *const Box<dyn FDynHashMap>) };
-  map.iter()
-}
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn _fproxy_FHashMap_free(handle: *const ()) {
@@ -126,6 +172,13 @@ unsafe extern "C" fn _fproxy_FHashMap_free(handle: *const ()) {
     map.free();
   }
 }
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn _fproxy_FHashMap_iter(handle: *const ()) -> *const () {
+  let map = unsafe { &*(handle as *const Box<dyn FDynHashMap>) };
+  map.iter()
+}
+
 
 
 

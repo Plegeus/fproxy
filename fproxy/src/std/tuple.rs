@@ -1,7 +1,16 @@
 
-use crate::{convert::FReprC, FFromC, FLocal, FProxyFrom, FToC};
+use crate::{convert::FReprC, FAsProxy, FFromC, FLocal, FProxyFrom, FToC};
 use libloading::Library;
 use safer_ffi::{derive_ReprC};
+
+
+impl<'l, A, B> FAsProxy<'l> for (A, B,) 
+where 
+  A: FAsProxy<'l>,
+  B: FAsProxy<'l>,
+{
+  type FSelf = (A::FSelf, B::FSelf);
+}
 
 
 #[derive_ReprC]
@@ -44,8 +53,6 @@ where
 {
   type CType = FTuple;
   fn to_c(self) -> Self::CType {
-    dbg!("FTOOOOCCCCCC");
-    dbg!(std::any::type_name::<B>());
     FTuple::from([
       Box::into_raw(Box::new(self.0.to_c())) as *const (),
       Box::into_raw(Box::new(self.1.to_c())) as *const (),
@@ -98,8 +105,6 @@ where
   B: FToC + FProxyFrom<'l, B::CType>,
 {
   fn proxy_from(ftup: FTuple, lib: &'l Library) -> Self {
-    dbg!(std::any::type_name::<B>());
-    dbg!(std::any::type_name::<B::CType>());
     let (a, b,): (A::CType, B::CType,) = unsafe { FFromC::from_c(ftup) };
     (
       A::proxy_from(a, lib),

@@ -83,8 +83,6 @@ macro_rules! impl_primitive {
     impl FToC for &$T {
       type CType = *const $T;
       fn to_c(self) -> Self::CType {
-        println!("FToC: {:?}", self);
-        println!("FToC: {:?}", self as *const $T);
         self as *const $T
       }
     }
@@ -303,6 +301,9 @@ mod primitives {
   }
 
   impl<'l> FAsProxy<'l> for &'l str {
+    type FSelf = &'l str;
+  }
+  impl<'l> FAsProxy<'l> for &'l &str {
     type FSelf = &'l str;
   }
 

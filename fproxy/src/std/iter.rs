@@ -1,5 +1,5 @@
 
-use std::{marker::PhantomData, ops::Deref};
+use std::{marker::PhantomData};
 use libloading::{Library, Symbol};
 use crate::{proxy::FFree, FAsProxy, FOwned, FProxy, FProxyFrom, FRef, FRefMut, FToC};
 

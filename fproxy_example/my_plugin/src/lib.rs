@@ -49,7 +49,6 @@ impl MyPlugin {
     &DATA
   }
 
-  #[fproxy::proxy("ignore")]
   pub fn map(&self) -> &HashMap<&'static str, i32> {
     &self.map
   }
@@ -68,9 +67,9 @@ impl MyPlugin {
       counter: 0,
       map: vec![
         ("one", 111),
-        //("two", 222),
-        //("three", 333),
-        //("four", 444),
+        ("two", 222),
+        ("three", 333),
+        ("four", 444),
       ]
         .into_iter()
         .collect(),
