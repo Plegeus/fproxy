@@ -139,20 +139,22 @@ impl FunctionDetails {
   fn extern_c_name(&self, ident: &Ident) -> Ident {
     Ident::new(&format!("_fproxy_{ident}_{}", &self.sig.ident), ident.span())
   }
-  fn output(&self, ident: &Ident, lifetime: Option<&str>) -> Quote {
+  fn output(&self, ident: &Ident, lt: Option<&str>) -> Quote {
     match self.sig.output.clone() {
       ReturnType::Default => quote!(()),
       ReturnType::Type(_, typ) => {
         let mut typ = *typ;
-        if lifetime.is_none() {
-          typ = remove_lifetimes(&typ);
-        }
+        typ = replace_lifetimes(&typ, lt.unwrap_or(""));
+        //typ = replace_lifetimes(&typ, "'l");
+        //if lifetime.is_none() {
+        //  typ = replace_lifetimes(&typ, "");
+        //}
         match &mut typ {
           Type::Path(path) if path.path.segments.first().unwrap().ident.to_string() == "Self" => {
             return quote!(#ident);
           },
           Type::Reference(refr) => {
-            if let Some(lt) = lifetime {
+            if let Some(lt) = lt {
               refr.lifetime = Some(Lifetime::new(lt, Span::call_site()));
             }
           }
@@ -282,7 +284,43 @@ fn make_c_funs(ident: &ItemDetails, funs: impl Iterator<Item = FunctionDetails>)
     .fold(Quote::new(), |q, fun| quote!(#q #fun))
 }
 
+fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
+  if fun.should_ignore(item) {
+    return quote!();
+  }
+
+  let output = fun.output(&item.ident, None);
+  let input = Input::from(fun);
+  let mut input = input.fold(|q, (ident, typ)| {
+    quote!(#q #ident: #typ)
+  });
+
+  // The function either needs a self (which has a library) or 
+  // a library in order to execute in the dll.
+  if let Some(mut slf) = fun.slf.clone() {
+    if let Some((_, l)) = &mut slf.reference {
+      *l = Some(Lifetime::new("'l", Span::call_site()));
+    } 
+    input = quote!(#slf, #input);
+  } else {
+    if fun.lib {
+      input = quote!(lib: fproxy::FLib, #input);
+    } else {
+      input = quote!(lib: &'l fproxy::libloading::Library, #input);
+    }
+  }
+
+  let name = &fun.sig.ident;
+  let body = make_body(item, fun);
+
+  // Inputs and outputs to proxies are proxies.
+  quote! {
+   pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
+      #body
+    }
+  }
+}
 fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   
   if fun.should_ignore(item) {
@@ -325,11 +363,13 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   let name = &fun.sig.ident;
 
   let body = if let Some(bounds) = &fun.returns_impl {
+    let bounds: Type = syn::parse(quote!(Box<dyn #bounds>).into()).unwrap();
+    let bounds = replace_lifetimes(&bounds, "");
     quote! {
       fproxy::FToC::to_c(
         Box::new(
           #item::#name(#input_names)
-        ) as Box<dyn #bounds>
+        ) as #bounds
       )
     }
   } else {
@@ -349,43 +389,6 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
       #body
     }
   } 
-}
-fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
-
-  if fun.should_ignore(item) {
-    return quote!();
-  }
-
-  let output = fun.output(&item.ident, None);
-  let input = Input::from(fun);
-  let mut input = input.fold(|q, (ident, typ)| {
-    quote!(#q #ident: #typ)
-  });
-
-  // The function either needs a self (which has a library) or 
-  // a library in order to execute in the dll.
-  if let Some(mut slf) = fun.slf.clone() {
-    if let Some((_, l)) = &mut slf.reference {
-      *l = Some(Lifetime::new("'l", Span::call_site()));
-    } 
-    input = quote!(#slf, #input);
-  } else {
-    if fun.lib {
-      input = quote!(lib: fproxy::FLib, #input);
-    } else {
-      input = quote!(lib: &'l fproxy::libloading::Library, #input);
-    }
-  }
-
-  let name = &fun.sig.ident;
-  let body = make_body(item, fun);
-
-  // Inputs and outputs to proxies are proxies.
-  quote! {
-   pub fn #name<'l>(#input) -> <#output as fproxy::FAsProxy<'l>>::FSelf {
-      #body
-    }
-  }
 }
 
 fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
@@ -454,12 +457,13 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 }
 
 
-fn remove_lifetimes(ty: &Type) -> Type {
+fn replace_lifetimes(ty: &Type, lt: &str) -> Type {
   let s = ty.to_token_stream().to_string();
   let re = Regex::new(r"'(?:[a-zA-Z0-9_]+|static)").unwrap();
-  let s = re.replace_all(&s, "").into_owned();
+  let s = re.replace_all(&s, lt).into_owned();
   syn::parse(s.parse().unwrap()).unwrap()
 } 
+
 
 /// Dismantles the input into tuples of `Ident` and `Type`. </br>
 struct Input {

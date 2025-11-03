@@ -58,11 +58,6 @@ pub fn repr_c(_: TokenStream, input: TokenStream) -> TokenStream {
     impl fproxy::FLocal for #ident { }
     impl fproxy::FReprC for #ident { }
 
-    //impl fproxy::FLocal for *const #ident { }
-    //impl fproxy::FReprC for *const #ident { }
-    //impl fproxy::FLocal for *mut #ident { }
-    //impl fproxy::FReprC for *mut #ident { }
-
     impl fproxy::FAsProxy<'_> for #ident {
       type FSelf = Self;
     }
@@ -79,7 +74,6 @@ pub fn repr_c(_: TokenStream, input: TokenStream) -> TokenStream {
         self
       }
     }
-
 
   }
     .into()

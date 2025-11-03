@@ -11,16 +11,25 @@ type RustIterator<'l, T> = Box<dyn Iterator<Item = T> + 'l>;
 /// on the type inside the library.
 /// `T` will be converted to a `CType`, which then needs to be
 /// converted to a `Proxy`.
-impl<'l, T> FAsProxy<'l> for RustIterator<'_, T> {
-  type FSelf = FOwned<FIterator<'l, T>>;
+impl<'l, T> FAsProxy<'l> for RustIterator<'_, T> 
+where 
+  T: FToC + FAsProxy<'l>,
+{
+  type FSelf = FOwned<FIterator<'l, T::FSelf, T::CType>>;
 }
 /// Analogous to `RustIterator<'l, T>`.
-impl<'l, T> FAsProxy<'l> for &RustIterator<'_, T> {
-  type FSelf = FRef<FIterator<'l, T>>;
+impl<'l, T> FAsProxy<'l> for &RustIterator<'_, T> 
+where 
+  T: FToC + FAsProxy<'l>,
+{
+  type FSelf = FRef<FIterator<'l, T::FSelf, T::CType>>;
 }
 /// Analogous to `RustIterator<'l, T>`.
-impl<'l, T> FAsProxy<'l> for &mut RustIterator<'_, T> {
-  type FSelf = FRefMut<FIterator<'l, T>>;
+impl<'l, T> FAsProxy<'l> for &mut RustIterator<'_, T> 
+where 
+  T: FToC + FAsProxy<'l>,
+{
+  type FSelf = FRefMut<FIterator<'l, T::FSelf, T::CType>>;
 }
 
 impl<I> Iterator for FOwned<I> 
@@ -66,13 +75,13 @@ impl<T: FToC> FToC for &mut RustIterator<'_, T> {
 
 
 /// The proxy to an iterator.
-pub struct FIterator<'l, T> {
-  marker: PhantomData<T>,
+pub struct FIterator<'l, Proxy, CType> {
+  proxy_marker: PhantomData<Proxy>,
+  c_marker: PhantomData<CType>,
   handle: *const (), // pointer to FIterContainer
   lib: &'l Library,
 }
-
-impl<T> FFree for FIterator<'_, T> {
+impl<Proxy, CType> FFree for FIterator<'_, Proxy, CType> {
   unsafe fn free(&mut self) {
     unsafe {
       let func: Symbol<unsafe extern "C" fn(*const ())> =
@@ -81,10 +90,12 @@ impl<T> FFree for FIterator<'_, T> {
     }
   }
 }
-impl<'l, T> FProxyFrom<'l, *const ()> for FIterator<'l, T> {
+
+impl<'l, Proxy, CType> FProxyFrom<'l, *const ()> for FIterator<'l, Proxy, CType> {
   fn proxy_from(handle: *const (), lib: &'l Library) -> Self {
     FIterator { 
-      marker: PhantomData, 
+      proxy_marker: PhantomData, 
+      c_marker: PhantomData, 
       handle, 
       lib, 
     }
@@ -98,6 +109,14 @@ impl<'l, T> FProxyFrom<'l, *const ()> for FIterator<'l, T> {
 pub struct FIterContainer<'l, T: FToC> {
   iter: *const RustIterator<'l, T>, // The iterator itself.
   next: Option<T::CType>, // The next item.
+}
+impl<'l, T: FToC> Deref for FIterContainer<'l, T> {
+  type Target = RustIterator<'l, T>;
+  fn deref(&self) -> &Self::Target {
+    unsafe {
+      &*self.iter
+    }
+  }
 }
 
 impl<T: FToC> FToC for FIterContainer<'_, T> {
@@ -145,13 +164,7 @@ impl<T: FToC> FFree for FIterContainer<'_, T> {
     }
   }
 }
-impl<T> FDynIterator for FIterContainer<'_, T> 
-where 
-  T: FToC,
-{
-  /// Returns `*const T::CType`. <br/>
-  /// If the pointer is `null`, it **must** be interpreted
-  /// as `None`.
+impl<T: FToC> FDynIterator for FIterContainer<'_, T> {
   fn next(&mut self) -> *const () {
     let iter = unsafe { &mut *(self.iter as *mut RustIterator<T>) };
     self.next = iter.next().map(FToC::to_c);
@@ -169,12 +182,11 @@ pub(in super) trait FDynIterator: FFree {
   fn next(&mut self) -> *const ();
 }
 
-impl<'l, T> Iterator for FIterator<'l, T> 
+impl<'l, Proxy, CType> Iterator for FIterator<'l, Proxy, CType> 
 where 
-  T: FAsProxy<'l> + FToC,
-  T::FSelf: FProxyFrom<'l, T::CType>,
+  Proxy: FProxyFrom<'l, CType>
 {
-  type Item = T::FSelf;
+  type Item = Proxy;
   fn next(&mut self) -> Option<Self::Item> {
     unsafe {
       // To mimic enums, we can use pointers to 
@@ -183,15 +195,16 @@ where
       // (C's equivalent of Box<dyn Any>).
       let func: Symbol<unsafe extern "C" fn(*const ()) -> *const ()> =
         self.lib.get(b"_fproxy_FIterator_next\0").unwrap();
-      let ptr = func(self.handle) as *const T::CType;
+      let ptr = func(self.handle) as *const CType;
       if ptr.is_null() {
         return None;
       }
       // Safety: FIterator stores the result of next, but when
       // next is called again, the previous result is overridden.
       // The behavious below mimics a move.
-      let c_value: T::CType = std::mem::transmute_copy(&*ptr);
-      Some(FProxyFrom::proxy_from(c_value, &self.lib))
+      let c_value: CType = std::mem::transmute_copy(&*ptr);
+      let r = Some(FProxyFrom::proxy_from(c_value, &self.lib));
+      r
     }
   }
 }

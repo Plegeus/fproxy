@@ -1,4 +1,5 @@
 
+use std::fmt::Debug;
 use ::std::{ffi::{c_char, CString}, slice};
 
 use libloading::Library;
@@ -20,18 +21,18 @@ impl<T: FReprC> FAsProxy<'_> for &mut T {
   type FSelf = Self;
 }
 
-macro_rules! impl_f_as_proxy {
-  ($T:ty) => {
-    impl FAsProxy<'_> for $T {
-      type FSelf = Self;
-    }
-  };
-}
-
 
 /// Trait to convert an arbitrary type to a proxy.
 pub trait FProxyFrom<'l, T> {
   fn proxy_from(value: T, lib: &'l Library) -> Self;
+}
+
+impl<T: FReprC + Debug> FProxyFrom<'_, T> for T {
+  fn proxy_from(value: T, _: &'_ Library) -> Self {
+    dbg!(std::any::type_name::<T>());
+    dbg!(&value);
+    value
+  }
 }
 
 
@@ -60,7 +61,10 @@ impl<T: FLocal> FLocal for &mut T { }
 macro_rules! impl_primitive {
   ($T:ty) => {
     
-    impl_f_as_proxy!($T);
+    impl FAsProxy<'_> for $T {
+      type FSelf = Self;
+    }
+
     impl_f_local!($T);
     
     impl FReprC for $T { }
@@ -79,6 +83,8 @@ macro_rules! impl_primitive {
     impl FToC for &$T {
       type CType = *const $T;
       fn to_c(self) -> Self::CType {
+        println!("FToC: {:?}", self);
+        println!("FToC: {:?}", self as *const $T);
         self as *const $T
       }
     }
@@ -89,11 +95,6 @@ macro_rules! impl_primitive {
       }
     } 
   
-    impl FProxyFrom<'_, $T> for $T {
-      fn proxy_from(val: $T, _: &Library) -> Self {
-        val
-      }
-    }
     impl FProxyFrom<'_, *const $T> for &$T {
       fn proxy_from(ptr: *const $T, _: &Library) -> Self {
         unsafe {
@@ -107,6 +108,7 @@ macro_rules! impl_primitive {
 
 impl_primitive!(());
 impl_primitive!(usize);
+impl_primitive!(i32);
 
 
 
@@ -325,15 +327,22 @@ mod primitives {
       }
     }
   }
+  impl FProxyFrom<'_, *mut c_char> for String {
+    fn proxy_from(value: *mut c_char, _: &'_ Library) -> Self {
+      unsafe { 
+        Self::from_c(value)
+      }
+    }
+  }
 
   impl FAsProxy<'_> for String {
     type FSelf = String;
   }
 
   impl<'l> FToC for &'l String {
-    type CType = <&'l str as FToC>::CType;
+    type CType = <String as FToC>::CType;
     fn to_c(self) -> Self::CType {
-      self.as_str().to_c()
+      self.clone().to_c()
     }
   }
   impl<'l> FAsProxy<'_> for &'l String {

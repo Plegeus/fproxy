@@ -32,7 +32,7 @@ const FACTOR: u128 = 2;
 #[fproxy::proxy("lib")]
 pub struct MyPlugin {
   data: Data,
-  map: HashMap<&'static str, u128>,
+  map: HashMap<&'static str, i32>,
   counter: usize,
   run: Box<dyn Fn(u128) -> u128>,
 }
@@ -49,7 +49,8 @@ impl MyPlugin {
     &DATA
   }
 
-  pub fn map(&self) -> &HashMap<&'static str, u128> {
+  #[fproxy::proxy("ignore")]
+  pub fn map(&self) -> &HashMap<&'static str, i32> {
     &self.map
   }
 
@@ -67,9 +68,9 @@ impl MyPlugin {
       counter: 0,
       map: vec![
         ("one", 111),
-        ("two", 222),
-        ("three", 333),
-        ("four", 444),
+        //("two", 222),
+        //("three", 333),
+        //("four", 444),
       ]
         .into_iter()
         .collect(),
@@ -101,10 +102,16 @@ impl MyPlugin {
   // Iterators are converted to an opaque type which in turn again 
   // Iterator.
   // The Item type will be set to the proxy type of the original item.
-  pub fn iter(&self, n: u128) -> impl Iterator<Item = Data> {
+  pub fn get_datas(&self, n: u128) -> impl Iterator<Item = Data> {
     (0..n)
       .map(|i| Data { data: (self.run)(i) })
   } 
+  pub fn get_i32s(&self) -> impl Iterator<Item = i32> {
+    (0..3)
+  }
+  pub fn get_refrs<'a>(&'a self) -> impl Iterator<Item = &'a i32> + 'a {
+    self.map.values()
+  }
 
 
   // If for whichever reason, the proxy cannot or may not have access to a function,

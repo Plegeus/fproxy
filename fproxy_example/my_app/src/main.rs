@@ -1,9 +1,9 @@
 
 
 use my_plugin;
-use my_plugin::FMyPlugin;
+use my_plugin::{FMyPlugin, FData};
 
-use fproxy::{FLib, FRef};
+use fproxy::{FLib, FRef, FOwned};
 use fproxy::collections::{FHashMap};
 use fproxy::iter::FIterator;
 use fproxy::convert::{U128, FStr};
@@ -23,11 +23,27 @@ fn main() {
   #[cfg(target_os = "windows")]
   let lib = FLib::new("./target/debug/my_plugin.dll");
 
-  let data = FMyPlugin::assoc(&lib);
-  println!("{}", data.read());
+  //let data = FMyPlugin::assoc(&lib);
+  //println!("{}", data.read());
 
   let mut plug = unsafe { FMyPlugin::new(lib, 5) };
 
+  // Iterators can also be turned into a proxy:
+  //for data in plug.get_datas(4) {  
+  //  let data: FOwned<FData<'_>> = data;
+  //  println!("iter: {}", data.read());
+  //}
+  //for i in plug.get_i32s() {
+  //  let i: i32 = i;
+  //  println!("{i}");
+  //}
+  for i in plug.get_refrs() {
+    let i: &i32 = i;
+    println!("{i}");
+  }
+
+
+  /*
   plug.print("hello world!");
 
   // Functions defined on a foreign type also generate on the proxy.
@@ -44,10 +60,6 @@ fn main() {
   println!("{}", data.read());
   println!("{}", plug.counter());
 
-  // Iterators can also be turned into a proxy:
-  for data in plug.iter(4) {  
-    println!("iter: {}", data.read());
-  }
 
   let mut my_trait = plug.get_trait();
   my_trait.do_something();
@@ -59,13 +71,25 @@ fn main() {
   }
 
   my_trait.do_something_else(123);
+ */
 
-  let map = plug.map();
-  let iter: FIterator<(&str, u128), _> = map.iter();
+  //let map: FRef<FHashMap<'_, &str, _, i32, _>> = 
+  //  plug.map();
+  //let iter: FIterator<'_, &i32, _> = map.values();
+  //for v in iter {
+  //  println!("{v}");
+  //}
+  
+  /*
+  let iter: FIterator<'_, (&&str, &i32), _> = 
+    map.iter();
   for (k, v) in iter {
+    let v: &i32 = v;
+    let k: &&str = k;
     println!("{k}: {v}");
   }
-  let map = HashMap::from(map);
-  println!("{map:?}");
+  */
+  //let map = HashMap::from(map);
+  //println!("{map:?}");
 
 }
