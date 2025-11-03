@@ -197,6 +197,22 @@ pub unsafe trait FFromPtr {
 }
 
 
+pub trait FFrom<T> {
+  fn ffrom(value: T) -> Self;
+}
+impl<T> FFrom<T> for T {
+  fn ffrom(value: T) -> Self {
+    value
+  }
+}
+
+impl FFrom<&i32> for i32 {
+  fn ffrom(value: &i32) -> Self {
+    *value
+  }
+}
+
+
 /*
  * +-----------------------------------+
  * |            Primitives             |

@@ -81,16 +81,12 @@ fn main() {
   //}
   
 
-  let map: FRef<FHashMap<'_, &str, i32>> = plug.map();
-  let iter: FOwned<FIterator<'_, (&str, &i32)>> = 
-    map.iter();
-  for (k, v) in iter {
+  let map = plug.map();
+  for (k, v) in map.iter() {
     println!("{k}: {v}");
   }
 
-  let map: HashMap<_, _> = map.iter()
-    .map(|(k, v)| (k, *v))
-    .collect();
+  let map = HashMap::from(map);
   println!("{map:?}");
 
 }

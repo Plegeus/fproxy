@@ -1,7 +1,7 @@
 
 use libloading::{Library, Symbol};
 
-use crate::{iter::FIterator, FAsProxy, FFree, FFromC, FOwned, FProxyFrom, FRef, FToC};
+use crate::{convert::FFrom, iter::FIterator, FAsProxy, FFree, FFromC, FOwned, FProxyFrom, FRef, FToC};
 use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 
 
@@ -9,20 +9,23 @@ use std::{collections::HashMap, hash::Hash, marker::PhantomData};
 impl<'l, K, V> FAsProxy<'l> for &'l HashMap<K, V> {
   type FSelf = FRef<FHashMap<'l, K, V>>;
 }
-/*
+
 impl<'l, K, V> From<FRef<FHashMap<'l, K, V>>> for HashMap<K::FSelf, V::FSelf> 
 where 
-  K: FAsProxy<'l> + 'static,
-  V: FAsProxy<'l> + 'static,
+  K: FAsProxy<'l> + 'l,
+  V: FAsProxy<'l> + 'l,
   &'l K: FAsProxy<'l>,
   &'l V: FAsProxy<'l>,
+  K::FSelf: FFrom<<&'l K as FAsProxy<'l>>::FSelf> + Hash + Eq,
+  V::FSelf: FFrom<<&'l V as FAsProxy<'l>>::FSelf>,
+  FIterator<'l, <(&'l K, &'l V) as FAsProxy<'l>>::FSelf>: Iterator<Item = <(&'l K, &'l V) as FAsProxy<'l>>::FSelf>
 {
   fn from(fmap: FRef<FHashMap<'l, K, V>>) -> Self {
     fmap.iter()
-      .map(Clone::clone)
+      .map(|(k, v)| (FFrom::ffrom(k), FFrom::ffrom(v)))
       .collect()
   }
-} */
+}
 
 
 pub struct FHashMap<'l, K, V> {
