@@ -1,7 +1,7 @@
 
 use std::{ops::{Deref, DerefMut}};
 use libloading::Library;
-use crate::FProxyFrom;
+use crate::{FProxyFrom, FToC};
 
 
 pub enum FAllocated<'a, T: ?Sized> {
@@ -102,6 +102,17 @@ where
       .into()
   }
 }
+
+unsafe impl<F> FToC for FOwned<F> 
+where 
+  F: FToC + FFree,
+{
+  type CType = F::CType;
+  fn to_c(self) -> Self::CType {
+    self.proxy.to_c()
+  }
+}
+
 
 /// A reference to a proxy. <br/>
 /// For example: `&MyPlugin` translates to `FRef<FMyPlugin<'l>>`.

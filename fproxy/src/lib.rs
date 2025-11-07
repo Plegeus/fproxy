@@ -11,7 +11,7 @@ pub use libloading;
 pub use safer_ffi;
 pub use delegate;
 pub use proxy::{FAllocated, FProxy, FFree, FOwned, FRef, FRefMut};
-pub use convert::{FLocal, FProxyFrom, FAsProxy, FToC, FFromC, FReprC};
+pub use convert::{FLocal, FProxyFrom, FAsProxy, FToC, FFromC, FReprC, FFrom};
 use ::std::{ops::Deref, path::Path};
 // Users should be able to `use fproxy::iter::...`
 pub use std::*;

@@ -79,6 +79,13 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
       Box::from_raw(handle as *mut #ident);
     }
 
+    unsafe impl fproxy::FToC for #tfident<'_> {
+      type CType = *const ();
+      fn to_c(self) -> Self::CType {
+        self.handle
+      }
+    }
+
     #ast
   }
     .into()
@@ -224,7 +231,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
     }
 
 
-    impl fproxy::FToC for Box<dyn #ident> {
+    unsafe impl fproxy::FToC for Box<dyn #ident> {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         use fproxy::FAllocated;
@@ -234,7 +241,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
         ) as *const ()
       }
     }
-    impl fproxy::FToC for &Box<dyn #ident> {
+    unsafe impl fproxy::FToC for &Box<dyn #ident> {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         use fproxy::FAllocated;
@@ -244,7 +251,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
         ) as *const ()
       }
     }
-    impl fproxy::FToC for &mut Box<dyn #ident> {
+    unsafe impl fproxy::FToC for &mut Box<dyn #ident> {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         use fproxy::FAllocated;
@@ -255,7 +262,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
       }
     }
 
-    impl fproxy::FToC for &dyn #ident {
+    unsafe impl fproxy::FToC for &dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         use fproxy::FAllocated;
@@ -265,7 +272,7 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
         ) as *const ()
       }
     }
-    impl fproxy::FToC for &mut dyn #ident {
+    unsafe impl fproxy::FToC for &mut dyn #ident {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         use fproxy::FAllocated;

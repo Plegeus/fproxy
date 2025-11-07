@@ -1,5 +1,4 @@
 
-use std::fmt::Debug;
 use ::std::{ffi::{c_char, CString}, slice};
 
 use libloading::Library;
@@ -20,6 +19,12 @@ impl<T: FReprC> FAsProxy<'_> for &T {
 impl<T: FReprC> FAsProxy<'_> for &mut T {
   type FSelf = Self;
 }
+impl<T: FReprC> FAsProxy<'_> for *const T {
+  type FSelf = Self;
+}
+impl<T: FReprC> FAsProxy<'_> for *mut T {
+  type FSelf = Self;
+}
 
 
 /// Trait to convert an arbitrary type to a proxy.
@@ -27,11 +32,14 @@ pub trait FProxyFrom<'l, T> {
   fn proxy_from(value: T, lib: &'l Library) -> Self;
 }
 
-impl<T: FReprC + Debug> FProxyFrom<'_, T> for T {
+impl<T: FReprC> FProxyFrom<'_, T> for T {
   fn proxy_from(value: T, _: &'_ Library) -> Self {
-    dbg!(std::any::type_name::<T>());
-    dbg!(&value);
     value
+  }
+}
+impl<T: FReprC> FProxyFrom<'_, *const T> for &T {
+  fn proxy_from(ptr: *const T, _: &'_ Library) -> Self {
+    unsafe { &*ptr }
   }
 }
 
@@ -68,43 +76,26 @@ macro_rules! impl_primitive {
     impl_f_local!($T);
     
     impl FReprC for $T { }
-    //impl FReprC for &$T { }
-    //impl FReprC for &mut $T { }
-    //impl FReprC for *const $T { }
-    //impl FReprC for *mut $T { }
-
-    /*
-    impl FToC for $T {
-      type CType = Self;
-      fn to_c(self) -> Self {
-        self
-      }
-    }*/
-    impl FToC for &$T {
+    
+    unsafe impl FToC for &$T {
       type CType = *const $T;
       fn to_c(self) -> Self::CType {
         self as *const $T
       }
     }
-    impl FToC for &mut $T {
+    unsafe impl FToC for &mut $T {
       type CType = *mut $T;
       fn to_c(self) -> Self::CType {
         self as *mut $T
       }
     } 
   
-    impl FProxyFrom<'_, *const $T> for &$T {
-      fn proxy_from(ptr: *const $T, _: &Library) -> Self {
-        unsafe {
-          &*ptr
-        }
-      }
-    }
 
   };
 }
 
 impl_primitive!(());
+impl_primitive!(std::ffi::c_void);
 impl_primitive!(usize);
 impl_primitive!(i32);
 
@@ -114,12 +105,16 @@ impl_primitive!(i32);
 /// The information is used convert function arguments to 
 /// c compatible datatypes in order to safely pass the dll boundary. </br>
 /// Converts a *Rust* type to a *C* type.
-pub trait FToC {
+/// ## Safety ##
+/// For any types `A`, `C` and `FA`, if `A` implements `FToC` and `FAsProxy`
+/// where `A::FSelf` is `FA`, then `A::CType` must be `FA::CType` 
+/// if `FA` implements `FToC`.
+pub unsafe trait FToC {
   type CType: FReprC;
   fn to_c(self) -> Self::CType;
 }
 
-impl<T: FReprC> FToC for T {
+unsafe impl<T: FReprC> FToC for T {
   type CType = Self;
   fn to_c(self) -> Self::CType {
     self
@@ -133,19 +128,19 @@ macro_rules! impl_f_to_c {
     crate::impl_f_to_c!(impl crate, $T);
   };
   (impl $crat:tt, $T:ty) => {
-    impl $crat::FToC for $T {
+    unsafe impl $crat::FToC for $T {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         Box::into_raw(Box::new(self)) as *const ()
       }
     }
-    impl $crat::FToC for &$T {
+    unsafe impl $crat::FToC for &$T {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         self as *const $T as *const ()
       }
     }
-    impl $crat::FToC for &mut $T {
+    unsafe impl $crat::FToC for &mut $T {
       type CType = *const ();
       fn to_c(self) -> Self::CType {
         self as *mut $T as *mut () as *const ()
@@ -160,6 +155,16 @@ macro_rules! impl_f_to_c {
 pub trait FFromC: FToC {
   unsafe fn from_c(c_type: Self::CType) -> Self;
 }
+
+impl<T> FFromC for T
+where 
+  T: FReprC
+{
+  unsafe fn from_c(c_type: Self::CType) -> Self {
+    c_type
+  }
+}
+
 
 #[macro_export]
 macro_rules! impl_f_from_c {
@@ -211,6 +216,11 @@ impl FFrom<&i32> for i32 {
     *value
   }
 }
+impl FFrom<&str> for String {
+  fn ffrom(value: &str) -> Self {
+    value.to_string()
+  }
+}
 
 
 /*
@@ -247,13 +257,13 @@ mod primitives {
     }
   }
 
-  impl FToC for u128 {
+  unsafe impl FToC for u128 {
     type CType = U128;
     fn to_c(self) -> Self::CType {
       From::from(self)
     }
   }
-  impl FToC for &u128 {
+  unsafe impl FToC for &u128 {
     type CType = <u128 as FToC>::CType;
     fn to_c(self) -> Self::CType {
       (*self).to_c()
@@ -304,7 +314,7 @@ mod primitives {
     }
   }
 
-  impl FToC for &str {
+  unsafe impl FToC for &str {
     type CType = FStr;
     fn to_c(self) -> Self::CType {
       From::from(self)
@@ -326,7 +336,7 @@ mod primitives {
   impl FLocal for *mut c_char { }
   impl FReprC for *mut c_char { }
 
-  impl FToC for String {
+  unsafe impl FToC for String {
     type CType = *mut c_char;
     fn to_c(self) -> Self::CType {
       CString::new(self)
@@ -356,14 +366,14 @@ mod primitives {
     type FSelf = String;
   }
 
-  impl<'l> FToC for &'l String {
+  unsafe impl<'l> FToC for &'l String {
     type CType = <String as FToC>::CType;
     fn to_c(self) -> Self::CType {
       self.clone().to_c()
     }
   }
-  impl<'l> FAsProxy<'_> for &'l String {
-    type FSelf = &'l str;
+  impl FAsProxy<'_> for &String {
+    type FSelf = String;
   }
 
   impl FProxyFrom<'_, FStr> for &str {
@@ -372,7 +382,7 @@ mod primitives {
     }
   }
   
-  impl FToC for &&str {
+  unsafe impl FToC for &&str {
     type CType = FStr;
     fn to_c(self) -> Self::CType {
       (*self).to_c()

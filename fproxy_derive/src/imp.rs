@@ -159,7 +159,11 @@ impl FunctionDetails {
             }
           }
           Type::ImplTrait(TypeImplTrait { impl_token: _, bounds }) => {
-            return quote!(Box<dyn #bounds>);
+            let typ = replace_lifetimes(
+              &syn::parse(quote!(Box<dyn #bounds>).into()).unwrap(), 
+              lt.unwrap_or(""),
+            );
+            return quote!(#typ);
           },
           _ => (),
         };
@@ -290,10 +294,11 @@ fn imp_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
     return quote!();
   }
 
-  let output = fun.output(&item.ident, None);
+  let output = fun.output(&item.ident, Some("'l"));
   let input = Input::from(fun);
   let mut input = input.fold(|q, (ident, typ)| {
-    quote!(#q #ident: #typ)
+    let typ = replace_lifetimes(&typ, "'l");
+    quote!(#q #ident: <#typ as fproxy::FAsProxy<'l>>::FSelf)
   });
 
   // The function either needs a self (which has a library) or 
@@ -459,9 +464,18 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
 fn replace_lifetimes(ty: &Type, lt: &str) -> Type {
   let s = ty.to_token_stream().to_string();
-  let re = Regex::new(r"'(?:[a-zA-Z0-9_]+|static)").unwrap();
-  let s = re.replace_all(&s, lt).into_owned();
-  syn::parse(s.parse().unwrap()).unwrap()
+  // replace all &'a with &
+  let re = Regex::new(r"& '(?:[a-zA-Z0-9_]+|static)")
+    .expect("replace_lifetimes; regex");
+  let s = re.replace_all(&s, format!("&")).into_owned();
+  // replace all 'a with lt.
+  let re = Regex::new(r"'(?:[a-zA-Z0-9_]+|static)")
+    .expect("replace_lifetimes; regex 2");
+  let s = re.replace_all(&s, format!("{lt}")).into_owned();
+  // replace all & with &lt
+  let s = s.replace("&", &format!("&{lt}"));
+  syn::parse(s.parse().expect("replace_lifetimes: string parse"))
+    .expect("replace_lifetimes: parse")
 } 
 
 
@@ -478,10 +492,13 @@ impl Input {
   //  quote!(#ident: #typ)
   //}
 
-  fn fold(&self, f: impl FnMut(Quote, &(Ident, Type)) -> Quote) -> Quote {
+  fn fold(&self, mut f: impl FnMut(Quote, &(Ident, Type)) -> Quote) -> Quote {
     self.names_and_types
       .iter()
-      .fold(Quote::new(), f)
+      .fold(Quote::new(), |q, tup| {
+        let q = f(q, tup);
+        quote!(#q,)
+      })
   }
 
   fn names(&self, f: impl Fn(&Ident) -> Quote) -> Quote {

@@ -37,7 +37,7 @@ impl<const N: usize> From<FTuple> for [*const (); N] {
 }
 
 
-impl<A> FToC for (A,) 
+unsafe impl<A> FToC for (A,) 
 where 
   A: FToC
 {
@@ -46,7 +46,7 @@ where
     FTuple::from([Box::into_raw(Box::new(self.0.to_c())) as *const ()])
   }
 }
-impl<A, B> FToC for (A, B,) 
+unsafe impl<A, B> FToC for (A, B,) 
 where 
   A: FToC,
   B: FToC,

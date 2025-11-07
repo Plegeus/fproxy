@@ -1,12 +1,13 @@
 #![allow(warnings)]
 
+
 use fproxy;
 use std::collections::HashMap;
 
 
 
 #[fproxy::proxy]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Data {
   data: u128,
 }
@@ -32,7 +33,7 @@ const FACTOR: u128 = 2;
 #[fproxy::proxy("lib")]
 pub struct MyPlugin {
   data: Data,
-  map: HashMap<&'static str, i32>,
+  map: HashMap<String, i32>,
   counter: usize,
   run: Box<dyn Fn(u128) -> u128>,
 }
@@ -45,11 +46,12 @@ const DATA: Data = Data { data: 8192 };
 #[fproxy::proxy]
 impl MyPlugin {
 
+
   pub fn assoc() -> &'static Data {
     &DATA
   }
 
-  pub fn map(&self) -> &HashMap<&'static str, i32> {
+  pub fn map(&self) -> &HashMap<String, i32> {
     &self.map
   }
 
@@ -66,10 +68,10 @@ impl MyPlugin {
       data: Data { data }, 
       counter: 0,
       map: vec![
-        ("one", 111),
-        ("two", 222),
-        ("three", 333),
-        ("four", 444),
+        ("one".into(), 111),
+        ("two".into(), 222),
+        ("three".into(), 333),
+        ("four".into(), 444),
       ]
         .into_iter()
         .collect(),
@@ -134,6 +136,23 @@ impl MyPlugin {
   }
   pub fn get_trait_mut(&mut self) -> &mut dyn MyTrait {
     &mut self.data
+  }
+
+
+  pub fn multiple_param(&self, a: usize, b: usize) {
+    
+  }
+
+  pub fn option(&self) -> Option<Data> {
+    Some(Data { data: 69 })
+  }
+  pub fn pass_data(&self, data: Data) {
+    println!("GOT DATA {data:?}");
+  }
+
+  pub fn result(&self) -> Result<u128, Data> {
+    //Err(Data { data: 1 })
+    Ok(0)
   }
 
 }

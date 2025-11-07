@@ -42,21 +42,21 @@ where
   }
 }
 
-impl<T: FToC> FToC for RustIterator<'_, T> {
+unsafe impl<T: FToC> FToC for RustIterator<'_, T> {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
     FIterContainer::from(self)
       .to_c()
   }
 }
-impl<T: FToC> FToC for &RustIterator<'_, T> {
+unsafe impl<T: FToC> FToC for &RustIterator<'_, T> {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
     FIterContainer::from(self)
       .to_c()
   }
 }
-impl<T: FToC> FToC for &mut RustIterator<'_, T> {
+unsafe impl<T: FToC> FToC for &mut RustIterator<'_, T> {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
     FIterContainer::from(self)
@@ -100,7 +100,7 @@ pub struct FIterContainer<'l, T: FToC> {
   next: Option<T::CType>, // The next item.
 }
 
-impl<T: FToC> FToC for FIterContainer<'_, T> {
+unsafe impl<T: FToC> FToC for FIterContainer<'_, T> {
   type CType = *const ();
   fn to_c(self) -> Self::CType {
     let b: Box<dyn FDynIterator> = Box::new(self);

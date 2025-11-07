@@ -62,16 +62,33 @@ pub fn repr_c(_: TokenStream, input: TokenStream) -> TokenStream {
       type FSelf = Self;
     }
 
-    impl fproxy::FToC for &#ident {
+    unsafe impl fproxy::FToC for &#ident {
       type CType = *const #ident;
       fn to_c(self) -> Self::CType {
         self
       }
     }
-    impl fproxy::FToC for &mut #ident {
+    unsafe impl fproxy::FToC for &mut #ident {
       type CType = *mut #ident;
       fn to_c(self) -> Self::CType {
         self
+      }
+    }
+    
+    impl fproxy::FFromC for &#ident {
+      unsafe fn from_c(c_type: Self::CType) -> Self {
+        unsafe { &*c_type }
+      }
+    }
+    impl fproxy::FFromC for &mut #ident {
+      unsafe fn from_c(c_type: Self::CType) -> Self {
+        unsafe { &mut *c_type }
+      }
+    }
+
+    impl fproxy::FFrom<&#ident> for #ident {
+      fn ffrom(value: &#ident) -> Self {
+        value.clone()
       }
     }
 

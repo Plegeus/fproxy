@@ -89,4 +89,17 @@ fn main() {
   let map = HashMap::from(map);
   println!("{map:?}");
 
+  match plug.option() {
+    None => println!("None"),
+    Some(d) => {
+      println!("{}", d.read());
+      plug.pass_data(d);
+    },
+  }
+  match plug.result() {
+    Ok(ok) => println!("ok: {ok}"),
+    Err(err) => println!("err: {}", err.read()),
+  }
+
+
 }

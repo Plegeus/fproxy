@@ -58,7 +58,7 @@ impl<K, V> FFree for FHashMap<'_, K, V> {
     }
   }
 }
-impl<'l, K, V> FToC for &'l HashMap<K, V> 
+unsafe impl<'l, K, V> FToC for &'l HashMap<K, V> 
 where
   K: Eq + Hash + 'static,
   V: 'static,
@@ -142,7 +142,7 @@ where
   }
 }
 
-impl<'l, K, V> FToC for FHashMapContainer<K, V> 
+unsafe impl<'l, K, V> FToC for FHashMapContainer<K, V> 
 where 
   K: Eq + Hash + 'static,
   V: 'static,
