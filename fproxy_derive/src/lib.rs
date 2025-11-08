@@ -1,11 +1,10 @@
 
 mod proxy;
 mod imp;
-mod fun;
 
 use proc_macro::{TokenStream};
 use quote::quote;
-use syn::{DeriveInput, Ident, ImplItemFn, ItemImpl, ItemTrait};
+use syn::{DeriveInput, Ident, ImplItemFn, ItemImpl, ItemTrait, TraitItem};
 
 
 macro_rules! macro_panic {
@@ -38,10 +37,13 @@ pub fn proxy(args: TokenStream, input: TokenStream) -> TokenStream {
   if let Ok(item) = syn::parse::<ItemImpl>(input.clone()) {
     return imp::imp(args, item);
   }
-  if let Ok(item) = syn::parse::<ImplItemFn>(input.clone()) {
-    return fun::fun(args, item);
+  if syn::parse::<ImplItemFn>(input.clone()).is_ok() {
+    return input;
   }
-  panic!("expected impl of fn");
+  if syn::parse::<TraitItem>(input.clone()).is_ok() {
+    return input;
+  }
+  panic!("fproxy::lib: expected impl of fn:\n{}", input.to_string());
 }
 
 

@@ -159,17 +159,21 @@ impl MyPlugin {
 
 
 
-#[fproxy::proxy]
+#[fproxy::proxy("tag")]
 pub trait MyTrait {
+  #[fproxy::proxy("tag")]
   fn do_something(&mut self);
+  #[fproxy::proxy("tag")]
   fn do_something_else(&self, i: u128) {
     println!("doing something else with {i}");
   }
 }
+
 impl MyTrait for Data {
   fn do_something(&mut self) {
     self.data = 0;
     println!("Data is reset!");
   }
 }
+
 

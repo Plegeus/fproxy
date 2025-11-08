@@ -94,7 +94,9 @@ pub(crate) fn proxy_trait(args: TokenStream, ast: ItemTrait) -> TokenStream {
   
   let ident = &ast.ident;
   let fstruct = proxy_fstruct(ident, &Input::as_trait());
+  // Implement the proxies (functions) on FIdent.
   let imp: Quote = crate::imp::imp_trait(args, ast.clone()).into();
+  // Implement conversion traits.
   let imp_trait = imp_trait(ident, ast.clone());
 
   quote! {

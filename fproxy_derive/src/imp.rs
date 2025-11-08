@@ -55,10 +55,11 @@ impl ItemDetails {
   }
 }
 
-impl From<&ItemTrait> for ItemDetails {
-  fn from(item: &ItemTrait) -> Self {
+impl From<(TokenStream, &ItemTrait)> for ItemDetails {
+  fn from(tup: (TokenStream, &ItemTrait)) -> Self {
+    let (args, item) = tup;
     ItemDetails { 
-      args: Args::default(),
+      args: syn::parse(args).unwrap(),
       ident: item.ident.clone(), 
       is_trait: true, 
     }
@@ -243,9 +244,9 @@ pub(crate) fn imp(args: TokenStream, input: ItemImpl) -> TokenStream {
   }
     .into()
 }
-pub(crate) fn imp_trait(_: TokenStream, input: ItemTrait) -> TokenStream {
+pub(crate) fn imp_trait(args: TokenStream, input: ItemTrait) -> TokenStream {
 
-  let item = ItemDetails::from(&input);
+  let item = ItemDetails::from((args, &input));
   let tfident = tfident(&item.ident);
 
   fn iter(input: &ItemTrait) -> impl Iterator<Item = FunctionDetails> {
@@ -341,12 +342,14 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
   //  quote!(fproxy::FFromC::from_c(#name))
   //});
   let mut input_names = input.patterns(|name, typ| {
+    let typ = replace_lifetimes(&typ, "'static");
     quote!(<#typ as fproxy::FFromC>::from_c(#name))
   });
 
   // The input needs to be FReprC.
   // The original input is mapped to there C types.
   let mut input = input.fold(|q, (ident, typ)| {
+    let typ = replace_lifetimes(&typ, "'static");
     quote!(#q #ident: <#typ as fproxy::FToC>::CType)
   });
 
@@ -399,13 +402,14 @@ fn imp_c_fun(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
   let input = Input::from(fun);
-  let output = fun.output(&item.ident, Some("'static"));
+  let output = fun.output(&item.ident, Some("'l"));
   let fname = fun.extern_c_name(&item.ident);
   let fn_bytes = LitByteStr::new(fname.to_string().as_bytes(), Span::call_site());
   let input_names = input.names(|name| {
     quote!(fproxy::FToC::to_c(#name))
   });
   let input = input.patterns(|ident, typ| {
+    let typ = replace_lifetimes(&typ, "'l");
     quote!(#ident: <#typ as fproxy::FToC>::CType)
   });
 
@@ -463,6 +467,9 @@ fn make_body(item: &ItemDetails, fun: &FunctionDetails) -> Quote {
 
 
 fn replace_lifetimes(ty: &Type, lt: &str) -> Type {
+  if !lt.is_empty() {
+    assert!(lt.starts_with('\''));
+  }
   let s = ty.to_token_stream().to_string();
   // replace all &'a with &
   let re = Regex::new(r"& '(?:[a-zA-Z0-9_]+|static)")
