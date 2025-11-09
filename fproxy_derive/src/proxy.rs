@@ -1,8 +1,10 @@
 
 use proc_macro::{TokenStream};
 use proc_macro2::{Literal, Span, TokenStream as Quote};
-use quote::quote;
-use syn::{DeriveInput, Ident, ItemTrait, LitByteStr, Token};
+use quote::{quote, ToTokens};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{DeriveInput, GenericParam, Ident, ItemTrait, LitByteStr, Token};
 use syn::parse::{Parse, ParseStream};
 
 use crate::tfident;
@@ -11,6 +13,7 @@ use crate::tfident;
 struct Input {
   lib: bool,
   is_trait: bool,
+  has_lifetime: bool,
 }
 impl Input {
   fn as_trait() -> Self {
@@ -34,6 +37,7 @@ impl Parse for Input {
     Ok(Input{
       lib: vec.contains(&format!("lib")),
       is_trait: false,
+      has_lifetime: false,
     })
   }
 }
@@ -42,6 +46,7 @@ impl Default for Input {
     Input { 
       lib: false,
       is_trait: false,
+      has_lifetime: false,
     }
   }
 }
@@ -50,8 +55,10 @@ impl Default for Input {
 pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   
   let ident = ast.ident.clone();
-  let input: Input = syn::parse(args)
+  let mut input: Input = syn::parse(args)
     .expect("failed to parse args");
+  input.has_lifetime = has_lifetime(&ast.generics.params);
+
   let tfident = tfident(&ident);
 
   let fstruct = proxy_fstruct(&ident, &input);
@@ -59,12 +66,17 @@ pub(crate) fn proxy(args: TokenStream, ast: DeriveInput) -> TokenStream {
   let cfree: Ident = Ident::new(&format!("_fproxy_{ident}_FProxy_free"), ident.span());
   let cfree_bytes = LitByteStr::new(cfree.to_string().as_bytes(), Span::call_site());
   
+  let mut final_ident = quote!(#ident);
+  if input.has_lifetime {
+    final_ident = quote!(#final_ident<'_>);
+  }
+
   quote! {
     
     #fstruct
     
-    fproxy::impl_f_from_c!(impl fproxy, #ident);
-    fproxy::impl_f_to_c!(impl fproxy, #ident);
+    fproxy::impl_f_from_c!(impl fproxy, #final_ident);
+    fproxy::impl_f_to_c!(impl fproxy, #final_ident);
 
     impl fproxy::FFree for #tfident<'_> {
       unsafe fn free(&mut self) {
@@ -152,6 +164,9 @@ fn proxy_fstruct(ident: &Ident, input: &Input) -> Quote {
   }
 
   let mut final_ident = quote!(#ident);
+  if input.has_lifetime {
+    final_ident = quote!(#ident<'l>);
+  }
   if input.is_trait {
     final_ident = quote!(Box<dyn #final_ident>);
   }
@@ -309,6 +324,16 @@ fn imp_trait(ident: &Ident, _: ItemTrait) -> Quote {
 }
 
 
+
+fn has_lifetime(punct: &Punctuated<GenericParam, Comma>) -> bool {
+  for param in punct.iter() {
+    match param {
+      GenericParam::Lifetime(_) => return true,
+      _ => (),
+    }
+  }
+  false
+}
 
 
 

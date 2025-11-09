@@ -99,6 +99,7 @@ impl_primitive!(std::ffi::c_void);
 impl_primitive!(usize);
 impl_primitive!(i32);
 impl_primitive!(f32);
+impl_primitive!(bool);
 
 
 

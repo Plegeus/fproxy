@@ -5,7 +5,6 @@ use fproxy;
 use std::collections::HashMap;
 
 
-
 #[fproxy::proxy]
 #[derive(Default, Debug)]
 pub struct Data {
@@ -21,6 +20,8 @@ impl Data {
     self.data
   }
 } 
+
+
 
 
 const FACTOR: u128 = 2;
@@ -177,3 +178,6 @@ impl MyTrait for Data {
 }
 
 
+
+#[fproxy::proxy]
+struct SomethingWithALifetime<'a>(&'a ());

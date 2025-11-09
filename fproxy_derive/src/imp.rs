@@ -40,6 +40,7 @@ pub(crate) struct ItemDetails {
   args: Args,
   ident: Ident,
   is_trait: bool,
+  is_impl_trait: bool,
 }
 impl ItemDetails {
   fn from_impl(args: &TokenStream, input: &ItemImpl) -> Self {
@@ -47,10 +48,17 @@ impl ItemDetails {
       args: syn::parse(args.clone())
         .expect("failed to parse args"),
       ident: match input.self_ty.as_ref() {
-        Type::Path(type_path) => type_path.path.get_ident().expect("expected struct").clone(),
-        _ => crate::macro_panic!("expected struct"),
+        Type::Path(type_path) => match type_path.path.get_ident() {
+          Some(ident) => ident.clone(),
+          None => {
+            assert!(type_path.path.segments.len() == 1);
+            type_path.path.segments[0].clone().ident.clone()
+          },
+        },
+        _ => crate::macro_panic!("expected struct {}", &input.self_ty.to_token_stream().to_string()),
       }, 
       is_trait: false,
+      is_impl_trait: input.trait_.is_some(),
     }
   }
 }
@@ -62,6 +70,7 @@ impl From<(TokenStream, &ItemTrait)> for ItemDetails {
       args: syn::parse(args).unwrap(),
       ident: item.ident.clone(), 
       is_trait: true, 
+      is_impl_trait: false,
     }
   }
 }
@@ -175,7 +184,7 @@ impl FunctionDetails {
 
   fn should_ignore(&self, item: &ItemDetails) -> bool {
     //(!self.slf.is_some() && !self.new) ||
-    self.prv || 
+    (self.prv && !item.is_impl_trait) || 
     self.ignore ||
     (item.args.tag && !self.tag)
   }

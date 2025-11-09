@@ -151,6 +151,16 @@ where
   }
 }
 
+unsafe impl<F> FToC for FRef<F> 
+where 
+  F: FToC + FFree,
+{
+  type CType = F::CType;
+  fn to_c(self) -> Self::CType {
+    self.proxy.to_c()
+  }
+}
+
 /// Like `FRef<F>`, but for mutable references.
 pub struct FRefMut<F: FProxy> {
   pub proxy: F,
@@ -194,7 +204,15 @@ where
   }
 }
 
-
+unsafe impl<F> FToC for FRefMut<F> 
+where 
+  F: FToC + FFree,
+{
+  type CType = F::CType;
+  fn to_c(self) -> Self::CType {
+    self.proxy.to_c()
+  }
+}
 
 
 
